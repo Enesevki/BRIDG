@@ -10,20 +10,24 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-r&*^ya7*^47nh-n@^qr=ik5l%5b^hu$p0&6g6f*3h$6bzj7(&v'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = True  #Keep this as True for development, set to False in production
 
 ALLOWED_HOSTS = []
 
@@ -74,8 +78,12 @@ WSGI_APPLICATION = 'gamehost_project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql', # Use the PostgreSQL engine
+        'NAME': os.getenv('DB_NAME'),             # Read DB Name from .env
+        'USER': os.getenv('DB_USER'),             # Read DB User from .env
+        'PASSWORD': os.getenv('DB_PASSWORD'),       # Read DB Password from .env
+        'HOST': os.getenv('DB_HOST', 'localhost'), # Read DB Host, default to localhost
+        'PORT': os.getenv('DB_PORT', '5432'),      # Read DB Port, default to 5432
     }
 }
 
