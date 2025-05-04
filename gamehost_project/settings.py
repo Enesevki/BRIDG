@@ -27,7 +27,7 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True  #Keep this as True for development, set to False in production
+DEBUG = True  # Keep this as True for development, set to False in production
 
 ALLOWED_HOSTS = []
 
@@ -41,6 +41,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+     # Third-party apps (We'll add DRF, etc. here later)
+
+
+    # Our local apps (Using AppConfig paths)
+    'games.apps.GamesConfig',
+    'users.apps.UsersConfig',
+    'interactions.apps.InteractionsConfig',
 ]
 
 MIDDLEWARE = [
