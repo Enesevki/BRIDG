@@ -139,7 +139,7 @@ class Game(models.Model):
     # Using PositiveIntegerField ensures these counts can't be negative.
     likes_count = models.PositiveIntegerField(
         default=0,
-        editable=False, # Should be calculated, not edited directly
+        editable=False,  # Should be calculated, not edited directly
         help_text="Number of likes the game has received."
     )
     dislikes_count = models.PositiveIntegerField(
