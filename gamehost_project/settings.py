@@ -44,6 +44,7 @@ INSTALLED_APPS = [
 
     # Third-party apps (We'll add DRF, etc. here later)
     'rest_framework',  # Django REST Framework for API development
+    'rest_framework.authtoken',  # Token authentication for DRF
 
 
     # Our local apps (Using AppConfig paths)
@@ -143,14 +144,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     # Varsayılan İzin Sınıfları (Default Permission Classes)
     # Bu ayar, API endpoint'lerine erişim için varsayılan politikayı belirler.
-    # 'AllowAny': Herkese açık (başlangıç için iyi, sonra özelleştireceğiz).
-    # 'IsAuthenticated': Sadece giriş yapmış kullanıcılar erişebilir.
-    # 'IsAuthenticatedOrReadOnly': Giriş yapmamış kullanıcılar sadece okuma yapabilir,
-    #                              giriş yapmış kullanıcılar yazma işlemi de yapabilir.
-    # Şimdilik, öğrenme aşamasında olduğumuz için herkese açık bırakalım.
-    # Daha sonra kullanıcı yetkilendirme (authentication) eklediğimizde bunu değiştireceğiz.
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
 
     # Varsayılan Kimlik Doğrulama Sınıfları (Default Authentication Classes)
@@ -166,4 +161,17 @@ REST_FRAMEWORK = {
     # API'den çok sayıda kayıt döndüğünde performansı artırmak için sayfalama kullanılır.
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     # 'PAGE_SIZE': 10, # Her sayfada gösterilecek kayıt sayısı
+
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        # API isteklerinde kullanıcı kimliğini doğrulamak için kullanılacak yöntemler.
+        # TokenAuthentication, 'Authorization: Token <token_value>' başlığını arar.
+        'rest_framework.authentication.TokenAuthentication',
+
+        # Tarayıcıda görüntülenebilir API (Browsable API) üzerinden test yaparken
+        # veya session tabanlı kimlik doğrulama kullanmak isterseniz bunları da ekleyebilirsiniz.
+        # Ancak SPA (Single Page Application) ile token tabanlı çalışırken
+        # TokenAuthentication genellikle ana yöntemdir.
+        # 'rest_framework.authentication.SessionAuthentication',
+        # 'rest_framework.authentication.BasicAuthentication',
+    ]
 }
