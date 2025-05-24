@@ -15,8 +15,16 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # games uygulamasının URL'lerini /api/games/ ön eki altında dahil et
+    path('api/games/', include('games.urls')),
+    # İleride users ve interactions için de benzer path'ler ekleyeceğiz:
+    # path('api/users/', include('users.urls')),
+    # path('api/interactions/', include('interactions.urls')),
+
+    # DRF'in login/logout view'larını tarayıcıda görüntülenebilir API için ekleyebiliriz (isteğe bağlı)
+    # path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
 ]
