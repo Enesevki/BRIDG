@@ -41,7 +41,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-     # Third-party apps (We'll add DRF, etc. here later)
+
+    # Third-party apps (We'll add DRF, etc. here later)
+    'rest_framework',  # Django REST Framework for API development
 
 
     # Our local apps (Using AppConfig paths)
@@ -135,3 +137,33 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Django REST Framework global settings
+REST_FRAMEWORK = {
+    # Varsayılan İzin Sınıfları (Default Permission Classes)
+    # Bu ayar, API endpoint'lerine erişim için varsayılan politikayı belirler.
+    # 'AllowAny': Herkese açık (başlangıç için iyi, sonra özelleştireceğiz).
+    # 'IsAuthenticated': Sadece giriş yapmış kullanıcılar erişebilir.
+    # 'IsAuthenticatedOrReadOnly': Giriş yapmamış kullanıcılar sadece okuma yapabilir,
+    #                              giriş yapmış kullanıcılar yazma işlemi de yapabilir.
+    # Şimdilik, öğrenme aşamasında olduğumuz için herkese açık bırakalım.
+    # Daha sonra kullanıcı yetkilendirme (authentication) eklediğimizde bunu değiştireceğiz.
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+
+    # Varsayılan Kimlik Doğrulama Sınıfları (Default Authentication Classes)
+    # Bu ayar, API isteklerinde kullanıcı kimliğinin nasıl doğrulanacağını belirler.
+    # Şimdilik boş bırakabiliriz veya SessionAuthentication ve BasicAuthentication'ı
+    # tarayıcıda görüntülenebilir API için ekleyebiliriz. TokenAuthentication'ı sonra ekleyeceğiz.
+    # 'DEFAULT_AUTHENTICATION_CLASSES': [
+    #     'rest_framework.authentication.SessionAuthentication', # Tarayıcıda görüntülenebilir API için
+    #     'rest_framework.authentication.BasicAuthentication',   # Basit HTTP Basic Auth için
+    # ],
+
+    # Tarayıcıda Görüntülenebilir API için Sayfalama (Pagination)
+    # API'den çok sayıda kayıt döndüğünde performansı artırmak için sayfalama kullanılır.
+    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    # 'PAGE_SIZE': 10, # Her sayfada gösterilecek kayıt sayısı
+}
