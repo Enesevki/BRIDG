@@ -134,6 +134,18 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# backend/gamehost_project/settings.py
+# ... (diğer ayarlar) ...
+
+# Media files (User-uploaded files)
+# https://docs.djangoproject.com/en/dev/ref/settings/#media-root
+# https://docs.djangoproject.com/en/dev/ref/settings/#media-url
+
+MEDIA_URL = '/media/' # Yüklenen dosyalara erişim için URL ön eki (örneğin, http://localhost:8000/media/dosya.jpg)
+MEDIA_ROOT = BASE_DIR / 'media' # Yüklenen dosyaların sunucuda saklanacağı ana dizin
+                                # BASE_DIR projenin backend klasörünü gösterir.
+                                # backend/media/ dizini oluşturulacak.
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 

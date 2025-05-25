@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings  # settings'i import et
+from django.conf.urls.static import static  # static'i import et
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -30,3 +32,7 @@ urlpatterns = [
     # ancak farklı senaryolar için bilmekte fayda var.
     # path('api-auth/', include('rest_framework.urls', namespace='rest_framework_auth_pages'))
 ]
+
+# Geliştirme ortamında media dosyalarını sunmak için:
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
