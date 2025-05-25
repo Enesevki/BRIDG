@@ -21,10 +21,12 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # games uygulamasının URL'lerini /api/games/ ön eki altında dahil et
     path('api/games/', include('games.urls')),
-    # İleride users ve interactions için de benzer path'ler ekleyeceğiz:
-    # path('api/users/', include('users.urls')),
+    # users uygulamasının URL'lerini /api/auth/ ön eki altında dahil et
+    path('api/auth/', include('users.urls', namespace='auth_api')), # namespace eklemek iyi bir pratik
     # path('api/interactions/', include('interactions.urls')),
 
-    # DRF'in login/logout view'larını tarayıcıda görüntülenebilir API için ekleyebiliriz (isteğe bağlı)
-    # path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
+    # DRF'in login/logout view'larını tarayıcıda görüntülenebilir API için ekleyebiliriz
+    # Bu, özellikle /api/auth/login/ endpoint'imiz varken gereksiz olabilir,
+    # ancak farklı senaryolar için bilmekte fayda var.
+    # path('api-auth/', include('rest_framework.urls', namespace='rest_framework_auth_pages'))
 ]
