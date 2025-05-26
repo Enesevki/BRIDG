@@ -38,8 +38,10 @@ body {
 }
 
 .logo {
-  width: 55px;
+  width: 200px;
   height: auto;
+  cursor: pointer;
+  object-fit: contain;
 }
 
 /* Category bar */
@@ -143,7 +145,7 @@ body {
 @media (max-width: 768px) {
   .game-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 15px;
+    gap: 20px;
     padding: 20px;
   }
 
@@ -157,6 +159,7 @@ body {
   }
 }
 
+/* signup page */
 .signup-container {
   min-height: 100vh;
   background: linear-gradient(to bottom right, #1e1e2f, #0d0d1a);
@@ -171,7 +174,7 @@ body {
   flex-direction: column;
   align-items: center;
   margin-top: 30px;
-  gap: 15px;
+  gap: 20px;
 }
 
 .signup-form input {
@@ -187,12 +190,15 @@ body {
   color: #333;
   border: none;
   border-radius: 25px;
-  padding: 10px 25px;
-  font-size: 14px;
+  padding: 12px 30px;
+  font-size: 16px;
+  cursor: pointer;
+  width: 250px;
+  text-align: center;
   display: flex;
+  justify-content: center;
   align-items: center;
   gap: 10px;
-  cursor: pointer;
 }
 
 .google-icon {
@@ -204,11 +210,14 @@ body {
   background-color: #6c74f5;
   color: white;
   border: none;
-  padding: 10px 25px;
-  border-radius: 20px;
+  border-radius: 25px;
+  padding: 12px 30px;
   font-size: 16px;
   cursor: pointer;
+  width: 250px;
+  text-align: center;
 }
+
 
 .login-link {
   margin-top: 10px;
@@ -237,4 +246,89 @@ body {
 .material-symbols-outlined {
   font-size: 32px;
   color: white;
+  user-select: none;
+}
+
+/* profile page */
+.profile-container {
+  min-height: 100vh;
+  background: linear-gradient(to bottom right, #1e1e2f, #0d0d1a);
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-top: 60px;
+}
+
+.profile-btn {
+  background-color: #bbb;
+  border: none;
+  border-radius: 25px;
+  padding: 12px 30px;
+  font-size: 16px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  
+  width: 250px;
+  justify-content: center;
+}
+
+.logout-btn {
+  background-color: #6c74f5;
+  border: none;
+  border-radius: 25px;
+  padding: 12px 30px;
+  font-size: 16px;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  width: 250px;
+  justify-content: center;
+}
+
+.profile-btn:hover, .logout-btn:hover {
+  opacity: 0.9;
+}
+
+/* normalize the size of icons in profile page */
+.profile-btn,
+.logout-btn {
+  position: relative;
+  background-color: #bbb;
+  border: none;
+  border-radius: 25px;
+  padding: 12px 30px;
+  font-size: 16px;
+  color: #333;
+  cursor: pointer;
+  width: 250px;
+  text-align: center;
+  padding-left: 50px; 
+}
+
+.logout-btn {
+  background-color: #6c74f5;
+  color: white;
+}
+
+/* icon inside the button */
+.profile-btn .material-symbols-outlined,
+.logout-btn .material-symbols-outlined {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 22px;
+  color: inherit;
+  user-select: none;
 }
