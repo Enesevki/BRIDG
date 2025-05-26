@@ -21,12 +21,12 @@ function Profile() {
             Liked Games
         </button>
 
-        <button className="profile-btn">
+        <button className="profile-btn" onClick={() => navigate('/upload')}>
             <span className="material-symbols-outlined">upload</span>
             Upload a Game
-        </button>
+        </button> 
 
-        <button className="logout-btn">
+        <button className="logout-btn" onClick={() => navigate('/')}>
             <span className="material-symbols-outlined">logout</span>
             Log out
         </button>

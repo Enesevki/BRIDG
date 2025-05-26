@@ -4,6 +4,7 @@ import './App.css';
 import Home from './pages/Home';
 import SignUp from './pages/SignUp';
 import Profile from './pages/Profile';
+import UploadGame from './pages/UploadGame';
 
 function App() {
   return (
@@ -13,7 +14,8 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/login" element={<h2 className="route-placeholder">Login Page (Coming Soon)</h2>} /> 
-          <Route path="/profile" element={<Profile />} />        
+          <Route path="/profile" element={<Profile />} />    
+          <Route path="/upload" element={<UploadGame />} />    
           <Route path="/game/:id" element={<h2 className="route-placeholder">Game Page (Coming Soon)</h2>} />
         </Routes>
       </div>

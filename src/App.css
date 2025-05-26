@@ -38,10 +38,8 @@ body {
 }
 
 .logo {
-  width: 200px;
-  height: auto;
-  cursor: pointer;
-  object-fit: contain;
+  transform: scale(1.5); 
+  transform-origin: left center;
 }
 
 /* Category bar */
@@ -330,5 +328,98 @@ body {
   transform: translateY(-50%);
   font-size: 22px;
   color: inherit;
+  user-select: none;
+}
+
+/* upload a game */
+.upload-container {
+  min-height: 100vh;
+  background: linear-gradient(to bottom right, #1e1e2f, #0d0d1a);
+  display: flex;
+  flex-direction: column;
+}
+
+.upload-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 60px;
+  gap: 20px;
+}
+
+.upload-select {
+  width: 350px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  color: #aaa; /* placeholder color */
+  background-color: white;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  text-align: left;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='gray'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 18px 18px;
+}
+
+/* When a real option is selected */
+.upload-select.selected {
+  color: #333;
+}
+
+
+.upload-input,
+.upload-textarea {
+  width: 350px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  color: #333;
+}
+
+.upload-textarea {
+  height: 150px;
+  resize: none;
+}
+
+.upload-file-input {
+  width: 350px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  color: #333;
+  background-color: white;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+.upload-btn {
+  position: relative;
+  background-color: #6c74f5;
+  color: white;
+  border: none;
+  padding: 12px 30px;
+  border-radius: 25px;
+  font-size: 16px;
+  cursor: pointer;
+  width: 250px;
+  text-align: center;
+  padding-left: 50px;
+}
+
+.upload-btn .material-symbols-outlined {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 22px;
+  color: white;
   user-select: none;
 }
