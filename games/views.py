@@ -17,8 +17,8 @@ from django.conf import settings # Gerekli olabilir (ama serializer'da kullanıl
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser  # Dosya yüklemeleri için
 
 # interactions uygulamasının serializer'ını ve modelini import et
-from interactions.models import Rating
-from interactions.serializers import RatingSerializer
+from interactions.models import Rating, Report  # Rating ve Report modellerini import et
+from interactions.serializers import RatingSerializer, ReportSerializer  # Rating ve Report serializerlarını import et
 
 
 class GenreViewSet(viewsets.ReadOnlyModelViewSet):
@@ -184,3 +184,28 @@ class GameViewSet(viewsets.ModelViewSet):
                 {"error": "Bu oyuna verilmiş bir oyunuz bulunmamaktadır."},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='report_game')
+    def report_game(self, request, id=None): # lookup_field 'id' ise parametre 'id' olmalı
+        """
+        Belirli bir oyunu raporlamak için.
+        POST isteği ile body'de {"reason": "BUG", "description": "Optional details..."} beklenir.
+        """
+        game = self.get_object() # id ile belirtilen Game objesini getirir
+        user = request.user
+
+        # Gelen veriyi ReportSerializer ile doğrula ve kaydet
+        # 'game' ve 'reporter' alanlarını context veya initial_data ile göndermemiz lazım
+        # ya da serializer.save() içinde göndereceğiz.
+        # En temizi, serializer'da bu alanları read_only yapıp save() içinde göndermek.
+        # Game zaten URL'den geliyor, reporter da request.user.
+
+        serializer = ReportSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            # reporter'ı ve game'i serializer.save() metoduna göndererek ata
+            # Eğer serializer'da game ve reporter alanları writeable ise (read_only değilse)
+            # ve request.data içinde geliyorsa, burada ayrıca göndermeye gerek yok.
+            # Ancak biz game'i URL'den, reporter'ı request.user'dan alıyoruz.
+            serializer.save(reporter=user, game=game)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
