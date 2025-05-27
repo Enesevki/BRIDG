@@ -6,14 +6,19 @@ from django.shortcuts import render
 
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
-from django.db.models import F
-from .models import Game, Genre, Tag # Genre ve Tag'i de import etmeyi unutmayın
-from .serializers import GameSerializer, GenreSerializer, TagSerializer # Genre ve Tag serializerlarını da
+from rest_framework.decorators import action  # Özel aksiyonlar için
+from django.db.models import F, Count, Q  # F: Field referansı, Count: Aggregation için
+from .models import Game, Genre, Tag  # Genre ve Tag'i de import etmeyi unutmayın
+from .serializers import GameSerializer, GenreSerializer, TagSerializer  # Genre ve Tag serializerlarını da
 import os # Gerekli olabilir (ama serializer'da kullanıldı)
 from django.conf import settings # Gerekli olabilir (ama serializer'da kullanıldı)
 # zipfile, default_storage, ContentFile importları artık view'da doğrudan gerekmeyebilir,
 # çünkü dosya işleme mantığı serializer'a taşındı. Ancak parse ediciler için kalabilir.
-from rest_framework.parsers import MultiPartParser, FormParser # Dosya yüklemeleri için
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser  # Dosya yüklemeleri için
+
+# interactions uygulamasının serializer'ını ve modelini import et
+from interactions.models import Rating
+from interactions.serializers import RatingSerializer
 
 
 class GenreViewSet(viewsets.ReadOnlyModelViewSet):
@@ -40,9 +45,10 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
 
     
 class GameViewSet(viewsets.ModelViewSet):
-    queryset = Game.objects.all().order_by('-created_at') # Şimdilik tüm oyunlar
+    queryset = Game.objects.all().order_by('-created_at')  # Şimdilik tüm oyunlar
     serializer_class = GameSerializer
-    parser_classes = [MultiPartParser, FormParser] # Dosya yüklemelerini (multipart/form-data) desteklemek için
+    parser_classes = [MultiPartParser, FormParser, JSONParser]  # Dosya yüklemelerini (multipart/form-data) desteklemek için
+    lookup_field = 'id'
 
     def get_queryset(self):
         """
@@ -54,7 +60,6 @@ class GameViewSet(viewsets.ModelViewSet):
             return Game.objects.all().order_by('-created_at')
         return Game.objects.filter(is_published=True).order_by('-created_at')
 
-
     def get_permissions(self):
         """
         Aksiyon bazlı izinler.
@@ -64,9 +69,9 @@ class GameViewSet(viewsets.ModelViewSet):
         elif self.action in ['update', 'partial_update', 'destroy']:
             # Daha sonra özel bir IsOwnerOrReadOnly izni eklenecek.
             # Şimdilik sadece giriş yapmış ve staff olanlar değiştirebilsin/silebilsin.
-            self.permission_classes = [permissions.IsAdminUser] # Veya kendi IsOwner izniniz
-        else: # list, retrieve
-            self.permission_classes = [permissions.AllowAny] # Oyun listesi ve detayı herkese açık
+            self.permission_classes = [permissions.IsAdminUser]  # Veya kendi IsOwner izniniz
+        else:  # list, retrieve
+            self.permission_classes = [permissions.AllowAny]  # Oyun listesi ve detayı herkese açık
         return super().get_permissions()
 
     def perform_create(self, serializer):
@@ -106,3 +111,76 @@ class GameViewSet(viewsets.ModelViewSet):
     #     #     # Bu klasörü ve içindekileri güvenli bir şekilde silmek için bir fonksiyon
     #     #     # shutil.rmtree(default_storage.path(extracted_dir)) # Dikkatli kullanılmalı!
     #     super().perform_destroy(instance)
+
+    queryset = Game.objects.all().annotate( # Annotate ile like/dislike sayılarını ekleyelim
+        likes_count_calculated=Count('ratings', filter=Q(ratings__rating_type=Rating.RatingChoices.LIKE)),
+        dislikes_count_calculated=Count('ratings', filter=Q(ratings__rating_type=Rating.RatingChoices.DISLIKE))
+    ).order_by('-created_at')
+    # NOT: likes_count ve dislikes_count modelde zaten var.
+    # Eğer bunları signal ile güncelliyorsak annotate'e gerek yok.
+    # Eğer signal kullanmıyorsak ve anlık sayım istiyorsak annotate kullanılabilir
+    # veya serializer'da SerializerMethodField ile hesaplanabilir.
+    # Şimdilik modeldeki alanları kullanacağız ve signal ile güncelleyeceğiz. Bu yüzden annotate'i yorumlayalım.
+    # queryset = Game.objects.all().order_by('-created_at') # Önceki haline geri dönelim
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def rate_game(self, request, id=None):
+        """
+        Belirli bir oyuna oy vermek (like/dislike) veya oyu güncellemek için.
+        POST isteği ile body'de {"rating_type": 1} (like için) veya {"rating_type": -1} (dislike için) beklenir.
+        """
+        game = self.get_object()  # pk ile belirtilen Game objesini getirir
+        user = request.user
+
+        try:
+            rating_type = int(request.data.get('rating_type'))
+            if rating_type not in [Rating.RatingChoices.LIKE, Rating.RatingChoices.DISLIKE]:
+                return Response(
+                    {"error": "Geçersiz rating_type. Sadece 1 (Like) veya -1 (Dislike) kabul edilir."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "rating_type alanı integer olarak (1 veya -1) gönderilmelidir."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Kullanıcının bu oyuna daha önce verdiği bir oy var mı kontrol et, varsa güncelle, yoksa oluştur.
+        # update_or_create, unique_together kısıtlamasıyla iyi çalışır.
+        rating_obj, created = Rating.objects.update_or_create(
+            user=user, game=game,
+            defaults={'rating_type': rating_type}  # Eğer yeni oluşturuluyorsa veya güncelleniyorsa bu değeri ata
+        )
+
+        serializer = RatingSerializer(rating_obj)  # Oluşturulan/güncellenen Rating objesini serialize et
+
+        # Yanıtı oluştur
+        action_taken = "oluşturuldu" if created else "güncellendi"
+        return Response(
+            {
+                "message": f"Oyun için oyunuz başarıyla {action_taken}.",
+                "rating": serializer.data
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        )
+
+    @action(detail=True, methods=['delete'], permission_classes=[permissions.IsAuthenticated], url_path='unrate_game')
+    def unrate_game(self, request, id=None):
+        """
+        Kullanıcının belirli bir oyuna verdiği oyu silmek için.
+        """
+        game = self.get_object()
+        user = request.user
+
+        try:
+            rating_to_delete = Rating.objects.get(user=user, game=game)
+            rating_to_delete.delete()
+            return Response(
+                {"message": "Oyunuz başarıyla kaldırıldı."},
+                status=status.HTTP_204_NO_CONTENT  # Başarılı silme, içerik yok
+            )
+        except Rating.DoesNotExist:
+            return Response(
+                {"error": "Bu oyuna verilmiş bir oyunuz bulunmamaktadır."},
+                status=status.HTTP_404_NOT_FOUND
+            )
