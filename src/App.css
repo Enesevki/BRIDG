@@ -302,7 +302,7 @@ body {
 .profile-btn,
 .logout-btn {
   position: relative;
-  background-color: #bbb;
+  background-color: white;
   border: none;
   border-radius: 25px;
   padding: 12px 30px;
