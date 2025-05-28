@@ -1,9 +1,10 @@
+
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import '../App.css';
 
-function SignUp() {
+function SignIn() {
   const navigate = useNavigate();
 
   return (
@@ -17,19 +18,18 @@ function SignUp() {
             alt="Google logo"
             className="google-icon"
           />
-          Sign up with Google
+          Sign in with Google
         </button>
 
-        <input type="text" placeholder="username" />
         <input type="email" placeholder="e-mail" />
         <input type="password" placeholder="password" />
 
-        <button className="submit-btn">Sign up</button>
+        <button className="submit-btn">Sign in</button>
 
         <p className="login-link">
-          Already have an account?{' '}
-          <span onClick={() => navigate('/signin')} className="link-text">
-            Sign in
+          Don't have an account?{' '}
+          <span onClick={() => navigate('/signup')} className="link-text">
+            Sign up
           </span>
         </p>
       </div>
@@ -37,4 +37,4 @@ function SignUp() {
   );
 }
 
-export default SignUp;
+export default SignIn;
