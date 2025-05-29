@@ -154,7 +154,7 @@ STATICFILES_DIRS = [
 # https://docs.djangoproject.com/en/dev/ref/settings/#media-url
 
 MEDIA_URL = '/media/'  # Yüklenen dosyalara erişim için URL ön eki (örneğin, http://localhost:8000/media/dosya.jpg)
-MEDIA_ROOT = BASE_DIR / 'media' # Yüklenen dosyaların sunucuda saklanacağı ana dizin
+MEDIA_ROOT = BASE_DIR / 'media'  # Yüklenen dosyaların sunucuda saklanacağı ana dizin
                                 # BASE_DIR projenin backend klasörünü gösterir.
                                 # backend/media/ dizini oluşturulacak.
 
@@ -163,6 +163,8 @@ MEDIA_ROOT = BASE_DIR / 'media' # Yüklenen dosyaların sunucuda saklanacağı a
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Oyun yüklemeleri için maksimum dosya boyutu (Megabyte cinsinden)
+MAX_GAME_ZIP_SIZE_MB = 50  # Örneğin 50 MB
 
 # Django REST Framework global settings
 REST_FRAMEWORK = {

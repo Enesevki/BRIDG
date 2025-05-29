@@ -151,13 +151,23 @@ class GameSerializer(serializers.ModelSerializer):
     def validate_webgl_build_zip(self, value):
         if value is None:
             return value
-
+        
+        # 1. Dosya Boyutu Kontrolü
+        max_size_bytes = settings.MAX_GAME_ZIP_SIZE_MB * 1024 * 1024
+        if value.size > max_size_bytes:
+            raise serializers.ValidationError(
+                f"Yüklenen ZIP dosyasının boyutu {settings.MAX_GAME_ZIP_SIZE_MB} MB'ı aşamaz. "
+                f"Sizin dosyanızın boyutu: {value.size // (1024 * 1024)} MB."
+            )
+        
+        # 2. Diğer ZIP içeriği doğrulamaları 
         potential_root_folder = None
         has_index = False
         has_build_folder = False
         has_template_data_folder = False
 
         try:
+            value.seek(0)  # Dosya pointer'ını başa al, size kontrolünden sonra okunabilmesi için
             with zipfile.ZipFile(value, 'r') as zip_ref:
                 file_list = zip_ref.namelist()
                 common_prefix = os.path.commonprefix(file_list)
@@ -276,71 +286,55 @@ class GameSerializer(serializers.ModelSerializer):
         """
         zip_file_field = game_instance.webgl_build_zip
         if not zip_file_field or not zip_file_field.name:
-            # If no ZIP file is uploaded, exit the function.
+            game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
+            game_instance.save(update_fields=['moderation_status'])
             return
+        
+        # Başarılı bir şekilde çıkarılırsa CHECKS_PASSED olacak,
+        # hata olursa CHECKS_FAILED olacak.
+        # Bu metot validasyondan sonra çağrıldığı için zip'in temel yapısının
+        # (index.html, Build, TemplateData) doğru olduğu varsayılır.
+        # Boyut kontrolü de validasyonda yapıldı.
 
         try:
-            # Generate a unique directory for the game based on its ID.
             game_uuid_str = str(game_instance.id)
             extraction_base_dir = os.path.join('game_builds', 'extracted')
-            extraction_target_root_on_server = os.path.join(
-                extraction_base_dir, game_uuid_str
-            )
+            extraction_target_root_on_server = os.path.join(extraction_base_dir, game_uuid_str)
             root_folder_in_zip = ""
-
-            # Open the ZIP file from storage.
+            
             with default_storage.open(zip_file_field.name, 'rb') as f_zip:
                 with zipfile.ZipFile(f_zip, 'r') as zip_ref:
                     file_list = zip_ref.namelist()
-                    if not file_list:
-                        # If the ZIP file is empty, exit the function.
+                    if not file_list:  # Bu validasyonda yakalanmalıydı
+                        game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
+                        game_instance.save(update_fields=['moderation_status'])
                         return
-
-                    # Determine the common prefix (root folder) in the ZIP file.
                     common_prefix = os.path.commonprefix(file_list)
-                    if common_prefix and common_prefix.endswith('/'):
-                        root_folder_in_zip = common_prefix
+                    if common_prefix and common_prefix.endswith('/'): root_folder_in_zip = common_prefix
                     elif common_prefix and '/' in common_prefix:
-                        if not all(
-                            fl.startswith(root_folder_in_zip)
-                            for fl in file_list if root_folder_in_zip
-                        ):
-                            root_folder_in_zip = ""
-                    else:
-                        root_folder_in_zip = ""
-
-                    # Iterate through the files in the ZIP and save them to storage.
+                        root_folder_in_zip = os.path.dirname(common_prefix) + '/'
+                        if not all(fl.startswith(root_folder_in_zip) for fl in file_list if root_folder_in_zip): root_folder_in_zip = ""
+                    else: root_folder_in_zip = ""
                     for member_name_in_zip in file_list:
                         relative_member_name_after_root = member_name_in_zip
-                        if (
-                            root_folder_in_zip
-                            and member_name_in_zip.startswith(root_folder_in_zip)
-                        ):
-                            relative_member_name_after_root = member_name_in_zip[
-                                len(root_folder_in_zip):
-                            ]
-                        # Skip invalid paths.
-                        if (
-                            relative_member_name_after_root.startswith('/')
-                            or '..' in relative_member_name_after_root
-                        ):
-                            continue
-
-                        # Construct the target file path on the server.
-                        target_file_path_on_server = os.path.join(
-                            extraction_target_root_on_server,
-                            relative_member_name_after_root,
-                        )
-                        # Save the file to storage if it's not a directory.
+                        if root_folder_in_zip and member_name_in_zip.startswith(root_folder_in_zip): relative_member_name_after_root = member_name_in_zip[len(root_folder_in_zip):]
+                        if relative_member_name_after_root.startswith('/') or '..' in relative_member_name_after_root: continue
+                        target_file_path_on_server = os.path.join(extraction_target_root_on_server, relative_member_name_after_root)
                         if not member_name_in_zip.endswith('/'):
                             file_data = zip_ref.read(member_name_in_zip)
-                            default_storage.save(
-                                target_file_path_on_server, ContentFile(file_data)
-                            )
-            # Update the entry point path for the game instance.
+                            default_storage.save(target_file_path_on_server, ContentFile(file_data))
+            
             game_instance.entry_point_path = os.path.join(extraction_target_root_on_server, root_folder_in_zip + 'index.html')
-            game_instance.save(update_fields=['entry_point_path'])
+            game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_PASSED  # Veya PENDING_REVIEW
+            game_instance.save(update_fields=['entry_point_path', 'moderation_status'])
+            print(f"Oyun {game_instance.id} için dosyalar başarıyla işlendi. Moderasyon durumu: {game_instance.moderation_status}")
+
         except Exception as e:
-            # Log any errors that occur during extraction.
             print(f"HATA (çıkarma): Zip dosyası {zip_file_field.name} işlenirken hata: {str(e)}")
-            pass
+            game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
+            # entry_point_path'i null yapmak veya boşaltmak da iyi bir fikir olabilir
+            game_instance.entry_point_path = None
+            game_instance.save(update_fields=['moderation_status', 'entry_point_path'])
+            # Burada bir hata fırlatmak yerine durumu kaydedip adminin incelemesini bekleyebiliriz.
+            # Veya oyunu tamamen silebiliriz (önceki yaklaşımlarda olduğu gibi).
+            # Şimdilik CHECKS_FAILED olarak işaretliyoruz.
