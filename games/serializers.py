@@ -45,6 +45,67 @@ class GameCreatorSerializer(serializers.ModelSerializer):
         fields = ['id', 'username']
 
 
+class GameUpdateSerializer(serializers.ModelSerializer):
+    """
+    Oyun güncelleme işlemleri için serializer.
+    Sadece kullanıcı tarafından güncellenebilecek alanları içerir.
+    Zip dosyası, yayın durumu, moderasyon durumu vb. buradan güncellenemez.
+    """
+    # Yazma işlemleri için (PUT/PATCH)
+    genre_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Genre.objects.all(),
+        many=True,
+        source='genres',
+        required=False,  # Güncelleme sırasında zorunlu değil (PATCH için)
+        allow_empty=True,  # Geçici olarak True, validasyonla kontrol edilecek
+        error_messages={
+            'does_not_exist': 'Geçersiz tür ID: {pk_value}.',
+            'incorrect_type': 'Tür ID\'leri bir liste olmalıdır.'
+        }
+    )
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Tag.objects.all(),
+        many=True,
+        source='tags',
+        required=False,  # Güncelleme sırasında zorunlu değil (PATCH için)
+        allow_empty=True,  # Geçici olarak True, validasyonla kontrol edilecek
+        error_messages={
+            'does_not_exist': 'Geçersiz etiket ID: {pk_value}.',
+            'incorrect_type': 'Etiket ID\'leri bir liste olmalıdır.'
+        }
+    )
+
+    class Meta:
+        model = Game
+        fields = [
+            'title', 
+            'description', 
+            'thumbnail',  # Kullanıcı yeni thumbnail yükleyebilir veya kaldırabilir
+            'genre_ids',  # Kullanıcı türleri güncelleyebilir
+            'tag_ids',    # Kullanıcı etiketleri güncelleyebilir
+        ]
+        # Diğer tüm alanlar (id, creator, is_published, moderation_status, webgl_build_zip vb.)
+        # bu serializer tarafından güncellenmeyecektir.
+
+    def validate_genre_ids(self, value):
+        # Eğer genre_ids alanı PATCH isteğinde gönderildiyse ve boş bir listeyse hata ver.
+        # Eğer PUT isteğindeysek ve bu alan gönderildiyse ve boşsa yine hata ver.
+        # ModelSerializer, PUT'ta tüm alanları bekler, PATCH'te sadece gönderilenleri.
+        # 'required=False' PATCH için işe yarar. PUT için bu validasyon önemli.
+        if isinstance(value, list) and not value:
+            # Eğer bu alanın gönderilmesi PUT'ta zorunluysa ve boş liste kabul edilmiyorsa
+            # (ki 'en az bir tane olmalı' demiştik)
+            if not self.partial or (self.partial and 'genre_ids' in self.initial_data):
+                 raise serializers.ValidationError("Oyunun en az bir türü olmalıdır. Tüm türleri silemezsiniz.")
+        return value
+
+    def validate_tag_ids(self, value):
+        if isinstance(value, list) and not value:
+            if not self.partial or (self.partial and 'tag_ids' in self.initial_data):
+                raise serializers.ValidationError("Oyunun en az bir etiketi olmalıdır. Tüm etiketleri silemezsiniz.")
+        return value
+
+
 class GameSerializer(serializers.ModelSerializer):
     genres = GenreSerializer(many=True, read_only=True)
     tags = TagSerializer(many=True, read_only=True)

@@ -7,12 +7,15 @@ from django.shortcuts import render
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser  # Dosya yüklemeleri için
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser  # Dosya yüklemeleri için
 from django.db.models import F, Q, Count  # Count ve Q'yu import etmeyi unutmayın
 from .models import Game, Genre, Tag  # Model importları
 from .serializers import (  # Serializer importları
-    GameSerializer, GenreSerializer, TagSerializer  #GameUpdateSerializer
+    GameSerializer, GenreSerializer, TagSerializer, GameUpdateSerializer
 )
+from django.core.files.storage import default_storage
+import os
+import shutil
 from .permissions import IsOwnerOrReadOnly  # Yeni izin sınıfımız
 
 # interactions uygulamasının modellerini ve serializer'larını import et
@@ -33,7 +36,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class GameViewSet(viewsets.ModelViewSet):
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     lookup_field = 'id'  # Primary key alanımızın adı 'id' olduğu için
 
     # Ana queryset'i burada tanımlıyoruz. get_queryset() bunu daha da filtreleyecek.
@@ -70,9 +73,34 @@ class GameViewSet(viewsets.ModelViewSet):
         """
         Aksiyona göre uygun serializer sınıfını döndürür.
         """
-        '''if self.action in ['update', 'partial_update']:
-            return GameUpdateSerializer  # Oyun güncelleme için ayrı serializer'''
-        return GameSerializer  # Diğer tüm aksiyonlar için varsayılan
+        if self.action in ['update', 'partial_update']:
+            return GameUpdateSerializer  # Güncelleme işlemleri için bu serializer kullanılacak
+        return GameSerializer  # Diğer tüm aksiyonlar için (create, list, retrieve)
+    
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()  # İzin kontrolü (IsOwnerOrReadOnly) burada yapılır
+
+        # Gelen veriyi GameUpdateSerializer ile doğrula
+        # partial=True (PATCH için) veya partial=False (PUT için)
+        update_serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        update_serializer.is_valid(raise_exception=True)
+        
+        # perform_update'ı çağır (ModelViewSet'teki varsayılan veya bizim override ettiğimiz)
+        self.perform_update(update_serializer)  # Bu serializer.save() çağırır
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            # If 'prefetch_related' has been used, then relation needs to be
+            # reloaded from the database.
+            instance._prefetched_objects_cache = {}
+
+        # Güncellenmiş instance'ı ana GameSerializer ile yanıt olarak döndür
+        response_serializer = GameSerializer(instance, context={'request': request})
+        return Response(response_serializer.data)
+
+    # partial_update metodu ModelViewSet'te update'i partial=True ile çağırır,
+    # bu yüzden yukarıdaki update metodu PATCH için de çalışır.
+    # Ayrı bir partial_update yazmaya genellikle gerek kalmaz.
 
     def get_permissions(self):
         """
@@ -81,9 +109,11 @@ class GameViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             self.permission_classes = [permissions.IsAuthenticated]
         elif self.action in ['update', 'partial_update', 'destroy', 'retrieve']:
+            # retrieve için IsOwnerOrReadOnly, objenin yayın durumunu ve sahipliğini kontrol eder.
+            # update, partial_update, destroy için ise sadece sahiplik kontrolü yapar (IsOwnerOrReadOnly'nin mevcut tanımına göre).
             self.permission_classes = [IsOwnerOrReadOnly]
-        elif self.action in ['rate_game', 'unrate_game', 'report_game']:  # Özel aksiyonlarımız için
-            self.permission_classes = [permissions.IsAuthenticated]  # Sadece giriş yapmışlar
+        elif self.action in ['rate_game', 'unrate_game', 'report_game']:
+            self.permission_classes = [permissions.IsAuthenticated]
         else:  # list
             self.permission_classes = [permissions.AllowAny]
         return super().get_permissions()
@@ -105,45 +135,54 @@ class GameViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_destroy(self, instance):
-        """
-        Bir oyun silindiğinde ilişkili dosyaları da siler.
-        """
-        # Önce dosyaları silmeye çalış
-        # (Bu kısım için default_storage ve os importları dosyanın en başında olmalı)
-        # import os
-        # from django.core.files.storage import default_storage
-        # import shutil
+        # ... (önceki cevaptaki dosya silme mantığı) ...
+        # ÖNEMLİ: default_storage, os, shutil importları gerekli
 
-        if instance.webgl_build_zip and default_storage.exists(instance.webgl_build_zip.name):
-            default_storage.delete(instance.webgl_build_zip.name)
-        if instance.thumbnail and default_storage.exists(instance.thumbnail.name):
-            default_storage.delete(instance.thumbnail.name)
+        original_zip_path = instance.webgl_build_zip.name if instance.webgl_build_zip else None
+        original_thumbnail_path = instance.thumbnail.name if instance.thumbnail else None
+        entry_point_full_path = instance.entry_point_path # Bu zaten MEDIA_ROOT'a göreceli olmalı
+
+        # Önce veritabanından objeyi sil (sinyaller varsa önce çalışır)
+        instance_id_str = str(instance.id)  # ID'yi silmeden önce al
+        instance.delete() 
+        print(f"Oyun {instance_id_str} veritabanından silindi.")
+
+        # Sonra dosyaları sil
+        if original_zip_path and default_storage.exists(original_zip_path):
+            default_storage.delete(original_zip_path)
+            print(f"Zip dosyası silindi: {original_zip_path}")
+        if original_thumbnail_path and default_storage.exists(original_thumbnail_path):
+            default_storage.delete(original_thumbnail_path)
+            print(f"Thumbnail silindi: {original_thumbnail_path}")
         
-        if instance.entry_point_path:
+        if entry_point_full_path:  # entry_point_path, çıkarılmış klasördeki index.html'in yoluydu
             try:
-                game_uuid_str = str(instance.id)
-                extraction_game_dir_segment = os.path.join('game_builds', 'extracted', game_uuid_str)
-                # default_storage.path() yerel dosya sistemi için çalışır,
-                # bulut depolama için farklı bir yaklaşım gerekebilir.
-                # Şimdilik yerel için varsayalım.
-                full_extraction_path_on_server = default_storage.path(extraction_game_dir_segment)
+                # Çıkarılmış oyun dosyalarının bulunduğu ana klasörü bulmaya çalış
+                # entry_point_path: game_builds/extracted/<uuid>/[kök_klasör/]index.html
+                # extraction_game_dir_segment: game_builds/extracted/<uuid>
+                extraction_game_dir_segment = os.path.join('game_builds', 'extracted', instance_id_str)
+                # default_storage.path() yerel dosya sistemi için çalışır.
+                # Bulut depolama için bu kısım farklılık gösterebilir.
+                try:
+                    full_extraction_path_on_server = default_storage.path(extraction_game_dir_segment)
+                    if os.path.exists(full_extraction_path_on_server) and os.path.isdir(full_extraction_path_on_server):
+                        shutil.rmtree(full_extraction_path_on_server)
+                        print(f"Çıkarılmış oyun dosyaları silindi: {full_extraction_path_on_server}")
+                    else:
+                        print(f"Çıkarılmış oyun klasörü bulunamadı veya bir dosya: {full_extraction_path_on_server}")
+                except NotImplementedError:
+                    print(f"UYARI: Storage backend'i path metodunu desteklemiyor. Çıkarılmış dosyalar ({extraction_game_dir_segment}) manuel silinmeli.")
+                except Exception as e_path:
+                    print(f"Çıkarılmış oyun klasör yolu alınırken hata: {e_path}")
 
-                if os.path.exists(full_extraction_path_on_server) and os.path.isdir(full_extraction_path_on_server):
-                    import shutil # Klasör ve içeriğini silmek için
-                    shutil.rmtree(full_extraction_path_on_server)
-                    print(f"Oyun dosyaları silindi: {full_extraction_path_on_server}")
-            except NotImplementedError: # default_storage.path() S3 gibi bazı backends'lerde desteklenmeyebilir
-                 print(f"UYARI: Storage backend'i path metodunu desteklemiyor. Çıkarılmış dosyalar ({extraction_game_dir_segment}) manuel silinmeli.")
             except Exception as e:
-                print(f"Çıkarılmış oyun dosyaları ({extraction_game_dir_segment}) silinirken hata: {e}")
-        
-        instance.delete()
+                print(f"Çıkarılmış oyun dosyaları ({entry_point_full_path} civarı) silinirken hata: {e}")
 
     def retrieve(self, request, *args, **kwargs):
         """
         Bir oyunun detayları getirildiğinde view_count'u artırır.
         """
-        instance = self.get_object() # İzin kontrolü ve obje getirme burada yapılır.
+        instance = self.get_object()  # İzin kontrolü ve obje getirme burada yapılır.
         Game.objects.filter(pk=instance.id).update(view_count=F('view_count') + 1)
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
