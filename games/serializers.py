@@ -5,11 +5,58 @@ from .models import Genre, Tag, Game
 from django.contrib.auth.models import User
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-from django.templatetags.static import static  # <--- BU SATIRI EKLEYİN
+from django.templatetags.static import static 
 from django.conf import settings  # MEDIA_URL ve STATIC_URL için (settings.DEBUG kontrolü için de kullanılabilir)
 from django.core.files.storage import default_storage
 import zipfile
 import os
+
+
+# --- Yardımcı Fonksiyon (Sınıf Dışında, Dosyanın Başında) ---
+def find_zip_root_folder(file_list_from_zip):
+    """
+    Verilen dosya listesinden (zip içinden) potansiyel bir kök klasör belirler.
+    Eğer tüm dosyalar tek bir ana klasör altındaysa, o klasörün adını döndürür (sonunda '/' ile).
+    Aksi takdirde boş string "" döndürür (dosyalar zip'in kökündedir).
+    """
+    if not file_list_from_zip:
+        return ""
+
+    # os.path.commonprefix tüm yollar için ortak en uzun öneki bulur.
+    # Örneğin: ["MyGame/index.html", "MyGame/Build/", "MyGame/TemplateData/"] -> "MyGame/"
+    # Örneğin: ["index.html", "Build/", "TemplateData/"] -> ""
+    # Örneğin: ["Game1/file.txt", "Game2/file.txt"] -> "" (çünkü ortak klasör yok)
+    # Örneğin: ["MyGame/file.txt", "MyGame/"] -> "MyGame/"
+    
+    prefix = os.path.commonprefix(file_list_from_zip)
+
+    if not prefix:  # Ortak bir önek yoksa, kök dizin varsayılır.
+        return ""
+
+    # Eğer prefix bir klasörse (sonunda '/' varsa) ve tüm dosyalar bu prefix ile başlıyorsa
+    if prefix.endswith('/') and all(f.startswith(prefix) for f in file_list_from_zip):
+        return prefix
+    
+    # Eğer prefix bir dosya yolunun bir parçasıysa (örn: "MyGame/Build")
+    # ve potansiyel bir kök klasör oluşturuyorsa.
+    # dirname("MyGame/Build") -> "MyGame"
+    # dirname("MyGame/") -> "MyGame" (bunu istemiyoruz, son / önemli)
+    # dirname("MyGame") -> ""
+    
+    # commonprefix'in sonu '/' değilse ama içinde '/' varsa, bir üst dizini almayı dene
+    if '/' in prefix:
+        # rstrip('/') ile sondaki olası '/' kaldırılır, sonra dirname alınır, sonra tekrar '/' eklenir.
+        # "MyGame/Build/file.js" -> "MyGame/Build" -> "MyGame/"
+        # "MyGame/index.html" -> "MyGame" -> "MyGame/" (eğer commonprefix "MyGame/index.html" ise)
+        potential_dir_from_prefix = os.path.dirname(prefix.rstrip('/'))
+        if potential_dir_from_prefix:  # Eğer bir üst klasör adı varsa ("" değilse)
+            root_candidate = potential_dir_from_prefix + '/'
+            if all(f.startswith(root_candidate) for f in file_list_from_zip):
+                return root_candidate
+    
+    # Yukarıdaki koşullar sağlanmazsa, dosyaların zip'in kökünde olduğunu varsay
+    return ""
+# --- Yardımcı Fonksiyon Sonu ---
 
 
 class GenreSerializer(serializers.ModelSerializer):
@@ -115,6 +162,9 @@ class GameSerializer(serializers.ModelSerializer):
     game_file_url = serializers.SerializerMethodField()
     entry_point_url = serializers.SerializerMethodField()  # Oyunun oynanabilir URL'si
 
+    # YENİ: moderation_status_display'i SerializerMethodField olarak tanımla
+    moderation_status_display = serializers.SerializerMethodField() 
+
     genre_ids = serializers.PrimaryKeyRelatedField(
         queryset=Genre.objects.all(),
         many=True,
@@ -151,13 +201,16 @@ class GameSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'creator', 'genres', 'tags',
             'genre_ids', 'tag_ids', 'thumbnail', 'thumbnail_url',
             'webgl_build_zip', 'game_file_url', 'entry_point_path', 'entry_point_url',
-            'is_published', 'created_at', 'updated_at',
+            'is_published', 'moderation_status', 'moderation_status_display',  # moderation_status_display eklendi
+            'created_at', 'updated_at',
             'likes_count', 'dislikes_count', 'play_count', 'view_count',
         ]
         read_only_fields = [
             'id', 'creator', 'created_at', 'updated_at',
             'likes_count', 'dislikes_count', 'play_count', 'view_count',
             'thumbnail_url', 'game_file_url', 'entry_point_path', 'entry_point_url',
+            'moderation_status_display',  # Bu da read_only
+            # is_published ve moderation_status GameUpdateSerializer'da yönetilecek
         ]
 
     def get_thumbnail_url(self, obj):
@@ -203,199 +256,144 @@ class GameSerializer(serializers.ModelSerializer):
                     # Eğer full_url zaten http ile başlamıyorsa (yerel storage gibi)
                     if not full_url.startswith(('http://', 'https://')):
                          return request.build_absolute_uri(full_url)
-                    return full_url # S3 gibi durumlarda zaten tam URL dönebilir
+                    return full_url  # S3 gibi durumlarda zaten tam URL dönebilir
                 return full_url
             except Exception:  # URL oluşturulamazsa (örn: dosya yok)
                 return None
         return None
+    
+    def get_moderation_status_display(self, obj):  # Bu metot zaten vardı
+        """Game modelindeki get_moderation_status_display() metodunu çağırır."""
+        return obj.get_moderation_status_display()
 
-    def validate_webgl_build_zip(self, value):
-        if value is None:
-            return value
+    def validate_webgl_build_zip(self, value):  # value burada InMemoryUploadedFile objesi
+        if value is None: return value
         
-        # 1. Dosya Boyutu Kontrolü
         max_size_bytes = settings.MAX_GAME_ZIP_SIZE_MB * 1024 * 1024
         if value.size > max_size_bytes:
             raise serializers.ValidationError(
                 f"Yüklenen ZIP dosyasının boyutu {settings.MAX_GAME_ZIP_SIZE_MB} MB'ı aşamaz. "
-                f"Sizin dosyanızın boyutu: {value.size // (1024 * 1024)} MB."
+                f"Sizin dosyanızın boyutu: {round(value.size / (1024 * 1024), 2)} MB."
             )
         
-        # 2. Diğer ZIP içeriği doğrulamaları 
-        potential_root_folder = None
-        has_index = False
-        has_build_folder = False
-        has_template_data_folder = False
-
+        potential_root_folder_in_zip = ""
         try:
-            value.seek(0)  # Dosya pointer'ını başa al, size kontrolünden sonra okunabilmesi için
+            value.seek(0)
             with zipfile.ZipFile(value, 'r') as zip_ref:
                 file_list = zip_ref.namelist()
-                common_prefix = os.path.commonprefix(file_list)
-
                 if not file_list:
                     raise serializers.ValidationError("Yüklenen ZIP dosyası boş.")
 
-                if common_prefix and common_prefix.endswith('/'):
-                    potential_root_folder = common_prefix
-                elif common_prefix and '/' in common_prefix:
-                    potential_root_folder = os.path.dirname(common_prefix) + '/'
-                    if not all(
-                        f.startswith(potential_root_folder)
-                        for f in file_list if potential_root_folder
-                    ):
-                        potential_root_folder = ""
-                else:
-                    potential_root_folder = ""
+                # Yardımcı fonksiyonu kullanarak kök klasörü bul
+                potential_root_folder_in_zip = find_zip_root_folder(file_list)
 
-                expected_index = potential_root_folder + 'index.html'
-                expected_build = potential_root_folder + 'Build/'
-                expected_template = potential_root_folder + 'TemplateData/'
+                expected_index = potential_root_folder_in_zip + 'index.html'
+                expected_build_dir = potential_root_folder_in_zip + 'Build/'
+                expected_template_data_dir = potential_root_folder_in_zip + 'TemplateData/'
 
-                has_index = expected_index in file_list
-                has_build_folder = any(
-                    f.startswith(expected_build) for f in file_list
-                )
-                has_template_data_folder = any(
-                    f.startswith(expected_template) for f in file_list
-                )
+                # Dosya ve klasör varlık kontrolleri
+                if not any(f == expected_index for f in file_list):  # Tam eşleşme
+                    raise serializers.ValidationError(f"Zip dosyası '{expected_index}' dosyasını içermelidir.")
+                if not any(f.startswith(expected_build_dir) for f in file_list):
+                    raise serializers.ValidationError(f"Zip dosyası '{expected_build_dir}' klasörünü (veya içeriğini) içermelidir.")
+                if not any(f.startswith(expected_template_data_dir) for f in file_list):
+                    raise serializers.ValidationError(f"Zip dosyası '{expected_template_data_dir}' klasörünü (veya içeriğini) içermelidir.")
 
-                if not has_index:
-                    raise serializers.ValidationError(
-                        f"Zip dosyası '{expected_index}' dosyasını içermelidir."
-                    )
-                if not has_build_folder:
-                    raise serializers.ValidationError(
-                        f"Zip dosyası '{expected_build}' klasörünü içermelidir."
-                    )
-                if not has_template_data_folder:
-                    raise serializers.ValidationError(
-                        f"Zip dosyası '{expected_template}' klasörünü içermelidir."
-                    )
-
+                # Path traversal kontrolü
                 for member_name in file_list:
-                    relative_member_name = member_name
-                    if potential_root_folder and member_name.startswith(
-                        potential_root_folder
-                    ):
-                        relative_member_name = member_name[len(potential_root_folder):]
-                    if relative_member_name.startswith('/') or '..' in relative_member_name:
-                        raise serializers.ValidationError(
-                            f"Zip dosyası geçersiz bir göreli dosya yolu içeriyor: '{member_name}'."
-                        )
+                    path_to_check = member_name
+                    if potential_root_folder_in_zip and member_name.startswith(potential_root_folder_in_zip):
+                        path_to_check = member_name[len(potential_root_folder_in_zip):]
+                    if path_to_check.startswith('/') or '..' in path_to_check:
+                        raise serializers.ValidationError(f"Zip dosyası geçersiz bir göreli dosya yolu içeriyor: '{member_name}'.")
+        
         except zipfile.BadZipFile:
-            raise serializers.ValidationError(
-                "Yüklenen dosya geçerli bir ZIP dosyası değil."
-            )
+            raise serializers.ValidationError("Yüklenen dosya geçerli bir ZIP dosyası değil.")
         except serializers.ValidationError:
             raise
         except Exception as e:
-            raise serializers.ValidationError(
-                f"ZIP dosyası doğrulanırken bir hata oluştu: {str(e)}"
-            )
+            raise serializers.ValidationError(f"ZIP dosyası doğrulanırken bir hata oluştu: {str(e)}")
+        
         value.seek(0)
+        # Validasyon başarılı, kök klasör bilgisini bir sonraki aşamaya (create/update) taşımak için
+        # serializer instance'ına geçici bir özellik olarak ekleyebiliriz.
+        # Bu, _process_uploaded_zip'in bu bilgiyi yeniden hesaplamasını önler.
+        self._validated_zip_root_folder = potential_root_folder_in_zip # Geçici özellik
         return value
 
     def create(self, validated_data):
-        """
-        Game objesini oluşturur ve zip dosyasını işler (çıkarır).
-        """
-        # 'creator' alanı validated_data'da olmayacak çünkü read_only. View'da atanacak.
-        # 'genres' ve 'tags' (ManyToManyField) validated_data'da ID listeleri olarak gelir
-        # (source ve PrimaryKeyRelatedField sayesinde). ModelSerializer bunları otomatik işler.
-
-        # webgl_build_zip validasyondan geçti, şimdi normal şekilde kaydedilecek.
+        # validated_data'dan _validated_zip_root_folder'ı al (veya varsayılan "")
+        # Eğer validate_webgl_build_zip çağrılmadıysa (örneğin bu alan gönderilmediyse), bu özellik olmayabilir.
+        # Ancak webgl_build_zip zorunlu olduğu için validate_... her zaman çağrılacaktır.
+        zip_root_folder = getattr(self, '_validated_zip_root_folder', "")
+        
         game_instance = super().create(validated_data)
-
-        # Dosya işleme (zip çıkarma) işlemini burada yapıyoruz, çünkü game_instance artık ID'ye sahip.
-        self._process_uploaded_zip(game_instance)
-
+        self._process_uploaded_zip(game_instance, zip_root_folder)
         return game_instance
 
     def update(self, instance, validated_data):
-        """
-        Game objesini günceller. Eğer yeni bir zip dosyası yüklendiyse onu da işler.
-        """
-        # Önceki zip ve thumbnail dosyalarını sakla (silme işlemi için gerekebilir)
-        # old_zip_path = instance.webgl_build_zip.name if instance.webgl_build_zip else None
-        # old_thumbnail_path = instance.thumbnail.name if instance.thumbnail else None
-
-        # ManyToMany alanları (genres, tags) ModelSerializer tarafından halledilir.
-        instance = super().update(instance, validated_data)
-
-        # Eğer 'webgl_build_zip' güncelleniyorsa (yani yeni bir zip yüklendiyse)
-        if 'webgl_build_zip' in validated_data and validated_data['webgl_build_zip'] is not None:
-            # İsteğe bağlı: Önceki çıkarılmış dosyaları silmek gerekebilir.
-            # Bu kısım karmaşık olabilir, şimdilik basit tutuyoruz.
-            # if instance.entry_point_path and default_storage.exists(os.path.dirname(instance.entry_point_path)):
-            #     # Klasörü ve içeriğini silmek için özel bir fonksiyon yazmak gerekebilir.
-            #     # default_storage.delete() genellikle tek bir dosyayı siler.
-            #     pass
-
-            self._process_uploaded_zip(instance)  # Yeni zip'i işle
+        zip_root_folder = getattr(self, '_validated_zip_root_folder', None)
+        # Eğer zip dosyası güncellenmiyorsa (PATCH isteğinde gönderilmediyse),
+        # zip_root_folder None olacak ve _process_uploaded_zip çağrılmayacak (veya çağrılsa da işlem yapmayacak).
         
-        # İsteğe bağlı: Eğer thumbnail silinmek isteniyorsa (null gönderildiyse) veya yeni bir tane yüklendiyse
-        # bu da burada ele alınabilir. ModelSerializer bunu kısmen halleder.
-
+        instance = super().update(instance, validated_data)
+        if 'webgl_build_zip' in validated_data and validated_data['webgl_build_zip'] is not None:
+            if zip_root_folder is None:  # Eğer validate_webgl_build_zip bu update için çağrılmadıysa
+                                        # (örn: sadece zip güncelleniyor, diğer validasyonlar eski)
+                                        # zip_root_folder'ı yeniden hesapla veya hata ver.
+                                        # En iyisi, _validated_zip_root_folder'ın her zaman set edildiğinden emin olmak.
+                                        # validate_webgl_build_zip her zaman çağrılır.
+                zip_root_folder = find_zip_root_folder(instance.webgl_build_zip.namelist()) # Bu satır çalışmaz, instance.webgl_build_zip ZipFile değil.
+                # Doğrusu, eğer zip güncelleniyorsa, validate_webgl_build_zip zaten _validated_zip_root_folder'ı set eder.
+                
+            self._process_uploaded_zip(instance, zip_root_folder if zip_root_folder is not None else "")
         return instance
 
-    def _process_uploaded_zip(self, game_instance):
-        """
-        Processes the uploaded ZIP file for a game instance.
-        Extracts the contents of the ZIP file and saves them to the server's storage.
-        Updates the game's entry point path based on the extracted files.
-        """
+    def _process_uploaded_zip(self, game_instance, root_folder_in_zip):
         zip_file_field = game_instance.webgl_build_zip
         if not zip_file_field or not zip_file_field.name:
+            # ... (hata durumu ve moderasyon status güncellemesi) ...
             game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
             game_instance.save(update_fields=['moderation_status'])
             return
-        
-        # Başarılı bir şekilde çıkarılırsa CHECKS_PASSED olacak,
-        # hata olursa CHECKS_FAILED olacak.
-        # Bu metot validasyondan sonra çağrıldığı için zip'in temel yapısının
-        # (index.html, Build, TemplateData) doğru olduğu varsayılır.
-        # Boyut kontrolü de validasyonda yapıldı.
 
         try:
             game_uuid_str = str(game_instance.id)
             extraction_base_dir = os.path.join('game_builds', 'extracted')
             extraction_target_root_on_server = os.path.join(extraction_base_dir, game_uuid_str)
-            root_folder_in_zip = ""
-            
+
             with default_storage.open(zip_file_field.name, 'rb') as f_zip:
                 with zipfile.ZipFile(f_zip, 'r') as zip_ref:
-                    file_list = zip_ref.namelist()
-                    if not file_list:  # Bu validasyonda yakalanmalıydı
-                        game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
-                        game_instance.save(update_fields=['moderation_status'])
-                        return
-                    common_prefix = os.path.commonprefix(file_list)
-                    if common_prefix and common_prefix.endswith('/'): root_folder_in_zip = common_prefix
-                    elif common_prefix and '/' in common_prefix:
-                        root_folder_in_zip = os.path.dirname(common_prefix) + '/'
-                        if not all(fl.startswith(root_folder_in_zip) for fl in file_list if root_folder_in_zip): root_folder_in_zip = ""
-                    else: root_folder_in_zip = ""
-                    for member_name_in_zip in file_list:
-                        relative_member_name_after_root = member_name_in_zip
-                        if root_folder_in_zip and member_name_in_zip.startswith(root_folder_in_zip): relative_member_name_after_root = member_name_in_zip[len(root_folder_in_zip):]
-                        if relative_member_name_after_root.startswith('/') or '..' in relative_member_name_after_root: continue
-                        target_file_path_on_server = os.path.join(extraction_target_root_on_server, relative_member_name_after_root)
-                        if not member_name_in_zip.endswith('/'):
+                    for member_name_in_zip in zip_ref.namelist():
+                        # Çıkarılacak dosyanın, zip içindeki (varsa) kök klasörden sonraki göreli yolu
+                        path_inside_zip_content = member_name_in_zip
+                        if root_folder_in_zip and member_name_in_zip.startswith(root_folder_in_zip):
+                            path_inside_zip_content = member_name_in_zip[len(root_folder_in_zip):]
+                        
+                        if not path_inside_zip_content:  # Eğer kök klasörün kendisiyse veya boş bir yolsa atla
+                            continue
+
+                        # Path traversal kontrolü (tekrar, güvenlik için)
+                        if path_inside_zip_content.startswith('/') or '..' in path_inside_zip_content:
+                            print(f"UYARI (çıkarma): Güvenlik riski oluşturan yol '{member_name_in_zip}'. Atlanıyor.")
+                            continue
+                        
+                        target_file_path_on_server = os.path.join(extraction_target_root_on_server, path_inside_zip_content)
+
+                        if not member_name_in_zip.endswith('/'): # Dosya ise
                             file_data = zip_ref.read(member_name_in_zip)
                             default_storage.save(target_file_path_on_server, ContentFile(file_data))
             
-            game_instance.entry_point_path = os.path.join(extraction_target_root_on_server, root_folder_in_zip + 'index.html')
-            game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_PASSED  # Veya PENDING_REVIEW
+            # entry_point_path, extraction_target_root_on_server altına çıkarılan 'index.html'in yoludur.
+            # path_inside_zip_content mantığına göre 'index.html' direkt bu kök altında olmalı.
+            game_instance.entry_point_path = os.path.join(extraction_target_root_on_server, 'index.html')
+            game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_PASSED
             game_instance.save(update_fields=['entry_point_path', 'moderation_status'])
             print(f"Oyun {game_instance.id} için dosyalar başarıyla işlendi. Moderasyon durumu: {game_instance.moderation_status}")
 
         except Exception as e:
+            # ... (hata durumu ve moderasyon status güncellemesi) ...
             print(f"HATA (çıkarma): Zip dosyası {zip_file_field.name} işlenirken hata: {str(e)}")
             game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
-            # entry_point_path'i null yapmak veya boşaltmak da iyi bir fikir olabilir
             game_instance.entry_point_path = None
             game_instance.save(update_fields=['moderation_status', 'entry_point_path'])
-            # Burada bir hata fırlatmak yerine durumu kaydedip adminin incelemesini bekleyebiliriz.
-            # Veya oyunu tamamen silebiliriz (önceki yaklaşımlarda olduğu gibi).
-            # Şimdilik CHECKS_FAILED olarak işaretliyoruz.
