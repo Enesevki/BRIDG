@@ -117,6 +117,23 @@ class GameViewSet(viewsets.ModelViewSet):
         else:  # list
             self.permission_classes = [permissions.AllowAny]
         return super().get_permissions()
+    
+    def create(self, request, *args, **kwargs):
+        # Oyun başlığını ve isteği yapan kullanıcıyı al
+        # request.data dosya yüklemelerinde QueryDict olabilir, .get() ile almak daha güvenli.
+        title = request.data.get('title')
+        creator = request.user  # IsAuthenticated izninden dolayı request.user dolu olmalı
+
+        # Eğer bu başlıkla bu kullanıcıya ait bir oyun zaten varsa, hata döndür
+        if title and Game.objects.filter(creator=creator, title=title.strip()).exists():
+            return Response(
+                {"title": ["Bu başlıkla zaten bir oyununuz mevcut. Farklı bir başlık seçin."]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Mükerrer değilse, ModelViewSet'in standart create işlemini çağır
+        # Bu, serializer'ı oluşturacak, is_valid() çağıracak, perform_create'i çağıracak vb.
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         """
