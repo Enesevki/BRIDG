@@ -18,6 +18,7 @@ from django.core.files.storage import default_storage
 import os
 import shutil
 from .permissions import IsOwnerOrReadOnly  # Yeni izin sınıfımız
+from django_ratelimit.decorators import ratelimit
 
 # interactions uygulamasının modellerini ve serializer'larını import et
 from interactions.models import Rating, Report
@@ -294,26 +295,36 @@ class GameViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    # --- increment_play_count düzeltmesi ---
     @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], url_path='increment_play_count')
-    # permission_classes: Herkes bu endpoint'e istek atabilir.
-    # Ancak, kötüye kullanımı önlemek için rate limiting veya daha karmaşık kontroller
-    # (örn: aynı kullanıcı/IP'den kısa sürede sadece bir kez sayma) eklenebilir.
-    # Başlangıç için AllowAny bırakabiliriz.
     def increment_play_count(self, request, id=None):  # lookup_field 'id' ise parametre 'id'
         """
         Belirli bir oyunun play_count'unu bir artırır.
         Bu endpoint, oyun istemcisi (Unity/React) tarafından oyun başladığında çağrılır.
+        Rate limited to 5 requests per minute per IP address.
         """
-        game = self.get_object()  # Oyunu getirir
-
-        # Atomik olarak play_count'u artır
-        Game.objects.filter(pk=game.pk).update(play_count=F('play_count') + 1)
+        # Check if rate limited
+        from django_ratelimit.core import is_ratelimited
+        if is_ratelimited(request=request, group='increment_play_count', fn=None, key='ip', rate='5/m', method='POST', increment=True):
+            return Response(
+                {"error": "Rate limit exceeded. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
         
-        # İsteğe bağlı: Güncellenmiş sayacı veya sadece başarı mesajı döndür
-        # game.refresh_from_db(fields=['play_count']) # Eğer güncel sayıyı döndüreceksek
-        # return Response({"message": "Play count incremented.", "play_count": game.play_count}, status=status.HTTP_200_OK)
-        return Response({"message": "Play count incremented successfully."}, status=status.HTTP_200_OK)
-    
+        try:  # Hata yakalamayı ekleyelim
+            game = self.get_object()  # Oyunu getirir
+
+            # Atomik olarak play_count'u artır
+            Game.objects.filter(pk=game.pk).update(play_count=F('play_count') + 1)
+            
+            return Response({"message": "Play count incremented successfully."}, status=status.HTTP_200_OK)
+        except Game.DoesNotExist:  # get_object() 404 fırlatır, bu yakalama DRF tarafından yönetilir.
+                                  # Ancak burada açıkça yakalamak debug için faydalı olabilir.
+            return Response({"error": "Game not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            # Beklenmedik bir hata olursa loglayıp genel bir hata mesajı dönelim
+            print(f"Error in increment_play_count for game {id}: {e}")  # Gerçek bir projede logging kullanın
+            return Response({"error": "An unexpected error occurred while incrementing play count."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class MyGamesAnalyticsListView(generics.ListAPIView):
     """

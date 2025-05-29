@@ -42,16 +42,24 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+
     # Third-party apps (We'll add DRF, etc. here later)
     'rest_framework',  # Django REST Framework for API development
     'rest_framework.authtoken',  # Token authentication for DRF
-
+    
 
     # Our local apps (Using AppConfig paths)
     'games.apps.GamesConfig',
     'users.apps.UsersConfig',
     'interactions.apps.InteractionsConfig',
 ]
+
+CACHES = {  # Bu produksiyon ortamında Redis veya Memcached gibi bir cache kullanabilirsiniz.
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',  # Geliştirme için rastgele bir isim, 
+    }
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

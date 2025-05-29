@@ -1,5 +1,6 @@
 asgiref==3.8.1
 Django==5.2
+django-ratelimit==4.1.0
 djangorestframework==3.16.0
 Markdown==3.8
 pillow==11.2.1

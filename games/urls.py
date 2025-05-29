@@ -2,7 +2,7 @@
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views # games/views.py dosyasını import ediyoruz
+from . import views  # games/views.py dosyasını import ediyoruz
 
 # DefaultRouter, ViewSet'ler için otomatik olarak URL pattern'leri oluşturur.
 # Örneğin, /genres/ listeleme ve yeni oluşturma için, /genres/{pk}/ detay, güncelleme, silme için.
