@@ -397,3 +397,40 @@ class GameSerializer(serializers.ModelSerializer):
             game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
             game_instance.entry_point_path = None
             game_instance.save(update_fields=['moderation_status', 'entry_point_path'])
+
+
+class MyGameAnalyticsSerializer(serializers.ModelSerializer):
+    """
+    Kullanıcının kendi oyunlarının temel analitiklerini göstermek için serializer.
+    """
+    thumbnail_url = serializers.SerializerMethodField()
+    moderation_status_display = serializers.SerializerMethodField() # <--- BU SATIRI EKLEYİN
+
+    class Meta:
+        model = Game
+        fields = [
+            'id', 'title', 'thumbnail_url',
+            'is_published', 
+            'moderation_status',  # Modeldeki asıl alan
+            'moderation_status_display',  # SerializerMethodField ile oluşturulan alan
+            'view_count', 'likes_count', 'dislikes_count', 'play_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = fields  # Bu serializer sadece okuma amaçlı
+
+    def get_thumbnail_url(self, obj):
+        request = self.context.get('request')
+        if obj.thumbnail and hasattr(obj.thumbnail, 'url') and obj.thumbnail.name:
+            thumbnail_actual_url = obj.thumbnail.url
+            if request is not None: return request.build_absolute_uri(thumbnail_actual_url)
+            return thumbnail_actual_url
+        else:
+            try: default_thumbnail_relative_path = static('images/default_game_thumbnail.png')
+            except Exception: return None
+            if request is not None: return request.build_absolute_uri(default_thumbnail_relative_path)
+            return default_thumbnail_relative_path
+
+    def get_moderation_status_display(self, obj):  # Bu metot zaten vardı
+        """Game modelindeki get_moderation_status_display() metodunu çağırır."""
+        return obj.get_moderation_status_display()
+    

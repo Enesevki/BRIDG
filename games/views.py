@@ -5,13 +5,14 @@ from django.shortcuts import render
 # backend/games/views.py
 
 from rest_framework import viewsets, permissions, status
+from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser  # Dosya yüklemeleri için
 from django.db.models import F, Q, Count  # Count ve Q'yu import etmeyi unutmayın
 from .models import Game, Genre, Tag  # Model importları
 from .serializers import (  # Serializer importları
-    GameSerializer, GenreSerializer, TagSerializer, GameUpdateSerializer
+    GameSerializer, GenreSerializer, TagSerializer, GameUpdateSerializer, MyGameAnalyticsSerializer
 )
 from django.core.files.storage import default_storage
 import os
@@ -199,9 +200,20 @@ class GameViewSet(viewsets.ModelViewSet):
         """
         Bir oyunun detayları getirildiğinde view_count'u artırır.
         """
-        instance = self.get_object()  # İzin kontrolü ve obje getirme burada yapılır.
+        instance = self.get_object() # İzin kontrolü ve obje getirme burada yapılır.
+                                     # IsOwnerOrReadOnly izni, yayınlanmamış oyunlar için
+                                     # doğru kullanıcıların erişimini sağlar.
+        
+        # Sadece yayınlanmış oyunlar için veya oyunun sahibi görüntülüyorsa view_count artırılabilir.
+        # Veya her detay görüntülemede artırılabilir, bu sizin tercihinize bağlı.
+        # Şimdilik, get_object başarılı olduysa (yani kullanıcı görme yetkisine sahipse) artırıyoruz.
         Game.objects.filter(pk=instance.id).update(view_count=F('view_count') + 1)
-        serializer = self.get_serializer(instance)
+        
+        # Ancak serializer zaten güncel (güncellemeden önceki) instance'ı kullanacak.
+        # Eğer güncel view_count'u hemen yanıtta istiyorsak:
+        instance.refresh_from_db(fields=['view_count'])
+
+        serializer = self.get_serializer(instance) # Artık action'a göre doğru serializer'ı getirecek
         return Response(serializer.data)
 
     # --- Özel Aksiyonlar (Rating ve Reporting) ---
@@ -281,3 +293,39 @@ class GameViewSet(viewsets.ModelViewSet):
             serializer.save(reporter=user, game=game)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], url_path='increment_play_count')
+    # permission_classes: Herkes bu endpoint'e istek atabilir.
+    # Ancak, kötüye kullanımı önlemek için rate limiting veya daha karmaşık kontroller
+    # (örn: aynı kullanıcı/IP'den kısa sürede sadece bir kez sayma) eklenebilir.
+    # Başlangıç için AllowAny bırakabiliriz.
+    def increment_play_count(self, request, id=None):  # lookup_field 'id' ise parametre 'id'
+        """
+        Belirli bir oyunun play_count'unu bir artırır.
+        Bu endpoint, oyun istemcisi (Unity/React) tarafından oyun başladığında çağrılır.
+        """
+        game = self.get_object()  # Oyunu getirir
+
+        # Atomik olarak play_count'u artır
+        Game.objects.filter(pk=game.pk).update(play_count=F('play_count') + 1)
+        
+        # İsteğe bağlı: Güncellenmiş sayacı veya sadece başarı mesajı döndür
+        # game.refresh_from_db(fields=['play_count']) # Eğer güncel sayıyı döndüreceksek
+        # return Response({"message": "Play count incremented.", "play_count": game.play_count}, status=status.HTTP_200_OK)
+        return Response({"message": "Play count incremented successfully."}, status=status.HTTP_200_OK)
+    
+
+class MyGamesAnalyticsListView(generics.ListAPIView):
+    """
+    Giriş yapmış kullanıcının kendi yüklediği oyunların
+    temel analitiklerini listeler.
+    """
+    serializer_class = MyGameAnalyticsSerializer
+    permission_classes = [permissions.IsAuthenticated] # Sadece giriş yapmış kullanıcılar
+
+    def get_queryset(self):
+        """
+        Bu view sadece isteği yapan kullanıcıya ait oyunları döndürmelidir.
+        """
+        user = self.request.user
+        return Game.objects.filter(creator=user).order_by('-created_at')

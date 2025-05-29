@@ -13,5 +13,6 @@ router.register(r'games', views.GameViewSet, basename='game')   # 'game' URL ön
 
 # API URL'lerimiz router tarafından otomatik olarak yönetiliyor.
 urlpatterns = [
-    path('', include(router.urls)), # Router tarafından oluşturulan URL'leri dahil et
+    path('', include(router.urls)),  # Router tarafından oluşturulan URL'leri dahil et
+    path('analytics/my-games/', views.MyGamesAnalyticsListView.as_view(), name='my_games_analytics'),
 ]
