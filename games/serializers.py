@@ -49,15 +49,36 @@ class GameSerializer(serializers.ModelSerializer):
 
     thumbnail_url = serializers.SerializerMethodField()
     game_file_url = serializers.SerializerMethodField()
-    entry_point_url = serializers.SerializerMethodField() # Oyunun oynanabilir URL'si
+    entry_point_url = serializers.SerializerMethodField()  # Oyunun oynanabilir URL'si
 
     genre_ids = serializers.PrimaryKeyRelatedField(
         queryset=Genre.objects.all(),
-        many=True, write_only=True, source='genres', required=False
+        many=True,
+        write_only=True,
+        source='genres',
+        required=True,
+        # allow_empty=False ekleyerek boş liste gönderilmesini de engelleyebiliriz.
+        allow_empty=False,  # Boş bir liste ([]) gönderilmesini engeller
+        error_messages={  # Özel hata mesajları
+            'required': 'En az bir tür seçilmelidir.',
+            'empty': 'En az bir tür seçilmelidir (boş liste gönderilemez).',
+            'does_not_exist': 'Geçersiz tür ID: {pk_value}.',  # Geçersiz ID için
+            'incorrect_type': 'Tür ID\'leri bir liste olmalıdır.'  # Yanlış tipte veri için
+        }
     )
     tag_ids = serializers.PrimaryKeyRelatedField(
         queryset=Tag.objects.all(),
-        many=True, write_only=True, source='tags', required=False
+        many=True,
+        write_only=True,
+        source='tags',
+        required=True,
+        allow_empty=False,  # Boş bir liste ([]) gönderilmesini engeller
+        error_messages={
+            'required': 'En az bir etiket seçilmelidir.',
+            'empty': 'En az bir etiket seçilmelidir (boş liste gönderilemez).',
+            'does_not_exist': 'Geçersiz etiket ID: {pk_value}.',
+            'incorrect_type': 'Etiket ID\'leri bir liste olmalıdır.'
+        }
     )
 
     class Meta:
@@ -115,11 +136,11 @@ class GameSerializer(serializers.ModelSerializer):
         - Güvenli dosya yolları içeriyor mu?
         Bu validasyon, dosya kaydedilmeden *önce* çalışır.
         """
-        if value is None: # Eğer dosya isteğe bağlıysa ve gelmediyse
+        if value is None:  # Eğer dosya isteğe bağlıysa ve gelmediyse
             return value
 
         try:
-            with zipfile.ZipFile(value, 'r') as zip_ref: # value burada InMemoryUploadedFile objesi
+            with zipfile.ZipFile(value, 'r') as zip_ref:  # value burada InMemoryUploadedFile objesi
                 # value.seek(0) # Dosya pointer'ını başa al, eğer daha önce okunduysa
                 # Bu satır genellikle InMemoryUploadedFile için gerekli olmaz ama büyük dosyalarda gerekebilir.
 
@@ -143,7 +164,7 @@ class GameSerializer(serializers.ModelSerializer):
 
         except zipfile.BadZipFile:
             raise serializers.ValidationError("Yüklenen dosya geçerli bir ZIP dosyası değil.")
-        except Exception as e: # Diğer olası hatalar
+        except Exception as e:  # Diğer olası hatalar
             raise serializers.ValidationError(f"ZIP dosyası işlenirken bir hata oluştu: {str(e)}")
         
         # Dosya pointer'ını başa almayı unutmayın, böylece Django dosyayı daha sonra kaydedebilir.
@@ -240,7 +261,7 @@ class GameSerializer(serializers.ModelSerializer):
             game_instance.entry_point_path = os.path.join(extraction_path_segment, 'index.html')
             game_instance.save(update_fields=['entry_point_path'])
 
-        except Exception as e: # BadZipFile zaten validasyonda yakalandı
+        except Exception as e:  # BadZipFile zaten validasyonda yakalandı
             # Bu aşamada bir hata olursa, durum karmaşıklaşır.
             # Belki oyunu 'has_error=True' gibi işaretlemek veya loglamak gerekir.
             # Yüklenen zip dosyasını ve kısmen çıkarılan dosyaları temizlemek de önemlidir.
