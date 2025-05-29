@@ -5,6 +5,9 @@ from .models import Genre, Tag, Game
 from django.contrib.auth.models import User
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.templatetags.static import static  # <--- BU SATIRI EKLEYİN
+from django.conf import settings  # MEDIA_URL ve STATIC_URL için (settings.DEBUG kontrolü için de kullanılabilir)
+from django.core.files.storage import default_storage
 import zipfile
 import os
 
@@ -97,12 +100,29 @@ class GameSerializer(serializers.ModelSerializer):
         ]
 
     def get_thumbnail_url(self, obj):
+        """
+        Oyunun thumbnail'ı için tam URL döndürür.
+        Eğer oyunun kendi thumbnail'ı yoksa, varsayılan bir logo URL'si döndürür.
+        """
         request = self.context.get('request')
-        if obj.thumbnail and hasattr(obj.thumbnail, 'url'):
+        if obj.thumbnail and hasattr(obj.thumbnail, 'url') and obj.thumbnail.name:  # .name ile dosyanın varlığını kontrol et
+            # Kullanıcının yüklediği thumbnail var
+            thumbnail_actual_url = obj.thumbnail.url  # Bu MEDIA_URL + dosya_yolu şeklinde gelir
             if request is not None:
-                return request.build_absolute_uri(obj.thumbnail.url)
-            return obj.thumbnail.url
-        return None
+                return request.build_absolute_uri(thumbnail_actual_url)
+            return thumbnail_actual_url  # Request context yoksa (testler vb.)
+        else:
+            # Varsayılan thumbnail URL'si
+            try:
+                default_thumbnail_relative_path = static('static/images/bridg-default-game-thumbnail.png')
+            except Exception as e:
+                # Eğer static dosya bulunamazsa (yanlış yol vb.) veya bir hata olursa
+                print(f"HATA: Varsayılan thumbnail static dosyası bulunamadı veya static tag hata verdi: {e}")
+                return None  # Veya boş bir string, veya frontend'in handle edeceği bir placeholder
+
+            if request is not None:
+                return request.build_absolute_uri(default_thumbnail_relative_path)
+            return default_thumbnail_relative_pat
 
     def get_game_file_url(self, obj):
         request = self.context.get('request')
@@ -124,50 +144,84 @@ class GameSerializer(serializers.ModelSerializer):
                          return request.build_absolute_uri(full_url)
                     return full_url # S3 gibi durumlarda zaten tam URL dönebilir
                 return full_url
-            except Exception: # URL oluşturulamazsa (örn: dosya yok)
+            except Exception:  # URL oluşturulamazsa (örn: dosya yok)
                 return None
         return None
 
     def validate_webgl_build_zip(self, value):
-        """
-        Yüklenen ZIP dosyasının içeriğini doğrular.
-        - Geçerli bir zip dosyası mı?
-        - İçinde 'index.html' var mı?
-        - Güvenli dosya yolları içeriyor mu?
-        Bu validasyon, dosya kaydedilmeden *önce* çalışır.
-        """
-        if value is None:  # Eğer dosya isteğe bağlıysa ve gelmediyse
+        if value is None:
             return value
 
+        potential_root_folder = None
+        has_index = False
+        has_build_folder = False
+        has_template_data_folder = False
+
         try:
-            with zipfile.ZipFile(value, 'r') as zip_ref:  # value burada InMemoryUploadedFile objesi
-                # value.seek(0) # Dosya pointer'ını başa al, eğer daha önce okunduysa
-                # Bu satır genellikle InMemoryUploadedFile için gerekli olmaz ama büyük dosyalarda gerekebilir.
+            with zipfile.ZipFile(value, 'r') as zip_ref:
+                file_list = zip_ref.namelist()
+                common_prefix = os.path.commonprefix(file_list)
 
-                # 1. index.html kontrolü
-                if 'index.html' not in zip_ref.namelist():
-                    raise serializers.ValidationError("Zip dosyası kök dizininde 'index.html' içermelidir.")
+                if not file_list:
+                    raise serializers.ValidationError("Yüklenen ZIP dosyası boş.")
 
-                # 2. Path traversal kontrolü
-                for member_name in zip_ref.namelist():
-                    if member_name.startswith('/') or '..' in member_name:
+                if common_prefix and common_prefix.endswith('/'):
+                    potential_root_folder = common_prefix
+                elif common_prefix and '/' in common_prefix:
+                    potential_root_folder = os.path.dirname(common_prefix) + '/'
+                    if not all(
+                        f.startswith(potential_root_folder)
+                        for f in file_list if potential_root_folder
+                    ):
+                        potential_root_folder = ""
+                else:
+                    potential_root_folder = ""
+
+                expected_index = potential_root_folder + 'index.html'
+                expected_build = potential_root_folder + 'Build/'
+                expected_template = potential_root_folder + 'TemplateData/'
+
+                has_index = expected_index in file_list
+                has_build_folder = any(
+                    f.startswith(expected_build) for f in file_list
+                )
+                has_template_data_folder = any(
+                    f.startswith(expected_template) for f in file_list
+                )
+
+                if not has_index:
+                    raise serializers.ValidationError(
+                        f"Zip dosyası '{expected_index}' dosyasını içermelidir."
+                    )
+                if not has_build_folder:
+                    raise serializers.ValidationError(
+                        f"Zip dosyası '{expected_build}' klasörünü içermelidir."
+                    )
+                if not has_template_data_folder:
+                    raise serializers.ValidationError(
+                        f"Zip dosyası '{expected_template}' klasörünü içermelidir."
+                    )
+
+                for member_name in file_list:
+                    relative_member_name = member_name
+                    if potential_root_folder and member_name.startswith(
+                        potential_root_folder
+                    ):
+                        relative_member_name = member_name[len(potential_root_folder):]
+                    if relative_member_name.startswith('/') or '..' in relative_member_name:
                         raise serializers.ValidationError(
-                            f"Zip dosyası geçersiz bir dosya yolu içeriyor: '{member_name}'. "
-                            "Tüm dosyalar zip kök dizinine göreceli olmalıdır."
+                            f"Zip dosyası geçersiz bir göreli dosya yolu içeriyor: '{member_name}'."
                         )
-                
-                # 3. (İsteğe bağlı) Beklenen klasör yapısı kontrolü (Build/, TemplateData/)
-                # required_folders = ['Build/', 'TemplateData/']
-                # actual_folders_in_zip = {name for name in zip_ref.namelist() if name.endswith('/')}
-                # if not all(folder in actual_folders_in_zip for folder in required_folders):
-                #     raise serializers.ValidationError("Zip dosyası 'Build/' ve 'TemplateData/' klasörlerini içermelidir.")
-
         except zipfile.BadZipFile:
-            raise serializers.ValidationError("Yüklenen dosya geçerli bir ZIP dosyası değil.")
-        except Exception as e:  # Diğer olası hatalar
-            raise serializers.ValidationError(f"ZIP dosyası işlenirken bir hata oluştu: {str(e)}")
-        
-        # Dosya pointer'ını başa almayı unutmayın, böylece Django dosyayı daha sonra kaydedebilir.
+            raise serializers.ValidationError(
+                "Yüklenen dosya geçerli bir ZIP dosyası değil."
+            )
+        except serializers.ValidationError:
+            raise
+        except Exception as e:
+            raise serializers.ValidationError(
+                f"ZIP dosyası doğrulanırken bir hata oluştu: {str(e)}"
+            )
         value.seek(0)
         return value
 
@@ -207,7 +261,7 @@ class GameSerializer(serializers.ModelSerializer):
             #     # default_storage.delete() genellikle tek bir dosyayı siler.
             #     pass
 
-            self._process_uploaded_zip(instance) # Yeni zip'i işle
+            self._process_uploaded_zip(instance)  # Yeni zip'i işle
         
         # İsteğe bağlı: Eğer thumbnail silinmek isteniyorsa (null gönderildiyse) veya yeni bir tane yüklendiyse
         # bu da burada ele alınabilir. ModelSerializer bunu kısmen halleder.
@@ -216,61 +270,77 @@ class GameSerializer(serializers.ModelSerializer):
 
     def _process_uploaded_zip(self, game_instance):
         """
-        Game instance'ına bağlı webgl_build_zip dosyasını işler, çıkarır
-        ve entry_point_path'i günceller.
-        Bu metod, create ve update içinde çağrılır.
+        Processes the uploaded ZIP file for a game instance.
+        Extracts the contents of the ZIP file and saves them to the server's storage.
+        Updates the game's entry point path based on the extracted files.
         """
         zip_file_field = game_instance.webgl_build_zip
-        if not zip_file_field or not zip_file_field.name: # Dosya yoksa veya adı boşsa
-            # Bu durum normalde validasyonda yakalanmalıydı.
-            # Eğer webgl_build_zip isteğe bağlıysa burası atlanabilir.
-            # Modelimiz zorunlu tuttuğu için bu bir hata durumudur.
-            # Aslında instance.delete() veya bir hata fırlatmak gerekebilir.
-            print(f"UYARI: _process_uploaded_zip çağrıldı ama {game_instance.id} için zip dosyası bulunamadı.")
+        if not zip_file_field or not zip_file_field.name:
+            # If no ZIP file is uploaded, exit the function.
             return
 
         try:
+            # Generate a unique directory for the game based on its ID.
             game_uuid_str = str(game_instance.id)
             extraction_base_dir = os.path.join('game_builds', 'extracted')
-            extraction_path_segment = os.path.join(extraction_base_dir, game_uuid_str) # örn: game_builds/extracted/uuid/
+            extraction_target_root_on_server = os.path.join(
+                extraction_base_dir, game_uuid_str
+            )
+            root_folder_in_zip = ""
 
-            # Önceki çıkarılmış dosyaları sil (eğer varsa ve update ise)
-            # Bu, özellikle update senaryolarında önemlidir.
-            # Basit bir yol: tüm klasörü silmeye çalışmak. Daha güvenli yöntemler de var.
-            # NOT: default_storage.exists() klasörler için her zaman doğru çalışmayabilir.
-            # ve default_storage.delete() klasörleri silmeyebilir.
-            # Bu yüzden yerel dosya sistemi için shutil.rmtree gibi bir şey kullanmak gerekebilir,
-            # ama bu storage backend bağımlılığı yaratır. Şimdilik bu adımı atlıyoruz veya
-            # dosya bazlı silme yapıyoruz (üzerine yazılacağı için gerek olmayabilir).
-            # default_storage genellikle aynı yola kaydedince üzerine yazar.
+            # Open the ZIP file from storage.
+            with default_storage.open(zip_file_field.name, 'rb') as f_zip:
+                with zipfile.ZipFile(f_zip, 'r') as zip_ref:
+                    file_list = zip_ref.namelist()
+                    if not file_list:
+                        # If the ZIP file is empty, exit the function.
+                        return
 
-            with default_storage.open(zip_file_field.name, 'rb') as f:
-                with zipfile.ZipFile(f, 'r') as zip_ref:
-                    for member_name in zip_ref.namelist():
-                        if member_name.startswith('/') or '..' in member_name:
-                            continue # Path traversal (zaten validasyonda da kontrol edildi)
-                        
-                        target_file_path = os.path.join(extraction_path_segment, member_name)
-                        if member_name.endswith('/'):
-                            # Klasörler için bir şey yapmaya gerek yok, dosyalar kaydedilirken oluşur.
-                            pass
-                        else:
-                            file_data = zip_ref.read(member_name)
-                            default_storage.save(target_file_path, ContentFile(file_data))
-            
-            game_instance.entry_point_path = os.path.join(extraction_path_segment, 'index.html')
+                    # Determine the common prefix (root folder) in the ZIP file.
+                    common_prefix = os.path.commonprefix(file_list)
+                    if common_prefix and common_prefix.endswith('/'):
+                        root_folder_in_zip = common_prefix
+                    elif common_prefix and '/' in common_prefix:
+                        if not all(
+                            fl.startswith(root_folder_in_zip)
+                            for fl in file_list if root_folder_in_zip
+                        ):
+                            root_folder_in_zip = ""
+                    else:
+                        root_folder_in_zip = ""
+
+                    # Iterate through the files in the ZIP and save them to storage.
+                    for member_name_in_zip in file_list:
+                        relative_member_name_after_root = member_name_in_zip
+                        if (
+                            root_folder_in_zip
+                            and member_name_in_zip.startswith(root_folder_in_zip)
+                        ):
+                            relative_member_name_after_root = member_name_in_zip[
+                                len(root_folder_in_zip):
+                            ]
+                        # Skip invalid paths.
+                        if (
+                            relative_member_name_after_root.startswith('/')
+                            or '..' in relative_member_name_after_root
+                        ):
+                            continue
+
+                        # Construct the target file path on the server.
+                        target_file_path_on_server = os.path.join(
+                            extraction_target_root_on_server,
+                            relative_member_name_after_root,
+                        )
+                        # Save the file to storage if it's not a directory.
+                        if not member_name_in_zip.endswith('/'):
+                            file_data = zip_ref.read(member_name_in_zip)
+                            default_storage.save(
+                                target_file_path_on_server, ContentFile(file_data)
+                            )
+            # Update the entry point path for the game instance.
+            game_instance.entry_point_path = os.path.join(extraction_target_root_on_server, root_folder_in_zip + 'index.html')
             game_instance.save(update_fields=['entry_point_path'])
-
-        except Exception as e:  # BadZipFile zaten validasyonda yakalandı
-            # Bu aşamada bir hata olursa, durum karmaşıklaşır.
-            # Belki oyunu 'has_error=True' gibi işaretlemek veya loglamak gerekir.
-            # Yüklenen zip dosyasını ve kısmen çıkarılan dosyaları temizlemek de önemlidir.
-            print(f"HATA: Zip dosyası {zip_file_field.name} işlenirken (çıkarılırken) hata: {str(e)}")
-            # game_instance.is_published = False # Belki yayınlanmamış olarak işaretle
-            # game_instance.some_error_field = str(e)
-            # game_instance.save()
-            # raise serializers.ValidationError({"detail": f"Dosya çıkarma hatası: {str(e)}"})
-            # Şimdilik sadece logluyoruz.
-            # Eğer bu kritik bir hataysa ve oyunun var olmaması gerekiyorsa,
-            # instance.delete() çağrılabilir, ancak bu create/update akışını bozar.
-            pass # Veya daha iyi bir hata yönetimi
+        except Exception as e:
+            # Log any errors that occur during extraction.
+            print(f"HATA (çıkarma): Zip dosyası {zip_file_field.name} işlenirken hata: {str(e)}")
+            pass

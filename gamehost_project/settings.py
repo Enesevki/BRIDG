@@ -132,7 +132,19 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+
+# Geliştirme sırasında Django'nun kendi statik dosyalarını (admin için olanlar gibi)
+# ve bizim uygulamalarımızın static/ altındaki dosyalarını bulacağı yerler.
+# Bizim doğrudan proje köküne eklediğimiz static/images/default...png için
+# aşağıdaki STATICFILES_DIRS ayarı önemlidir.
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',  # Projenizin ana 'backend' dizinindeki 'static' klasörünü belirtir
+]
+
+# Üretim ortamında 'collectstatic' komutunun statik dosyaları toplayacağı yer.
+# Geliştirme sırasında bu çok kritik değil ama tanımlı olması iyidir.
+# STATIC_ROOT = BASE_DIR / 'staticfiles_collected' # Genellikle .gitignore'a eklenir
 
 # backend/gamehost_project/settings.py
 # ... (diğer ayarlar) ...
@@ -141,7 +153,7 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/dev/ref/settings/#media-root
 # https://docs.djangoproject.com/en/dev/ref/settings/#media-url
 
-MEDIA_URL = '/media/' # Yüklenen dosyalara erişim için URL ön eki (örneğin, http://localhost:8000/media/dosya.jpg)
+MEDIA_URL = '/media/'  # Yüklenen dosyalara erişim için URL ön eki (örneğin, http://localhost:8000/media/dosya.jpg)
 MEDIA_ROOT = BASE_DIR / 'media' # Yüklenen dosyaların sunucuda saklanacağı ana dizin
                                 # BASE_DIR projenin backend klasörünü gösterir.
                                 # backend/media/ dizini oluşturulacak.
