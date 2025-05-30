@@ -23,6 +23,10 @@ import os
 import shutil
 from .permissions import IsOwnerOrReadOnly  # Yeni izin sınıfımız
 from django_ratelimit.decorators import ratelimit
+from gamehost_project.rate_limiting import (
+    api_rate_limit, GameUploadThrottle, RatingThrottle, 
+    ReportThrottle, GameSearchThrottle, get_rate_limit_headers
+)
 
 # interactions uygulamasının modellerini ve serializer'larını import et
 from interactions.models import Rating, Report
@@ -44,6 +48,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
 class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     lookup_field = 'id'  # Primary key alanımızın adı 'id' olduğu için
+    throttle_classes = [GameUploadThrottle]  # Default throttling for game operations
 
     # Filtering, Search, and Ordering
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -131,7 +136,14 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
             self.permission_classes = [permissions.AllowAny]
         return super().get_permissions()
     
+    @api_rate_limit(group='upload', rate='5/h', methods=['POST'], key='user')
     def create(self, request, *args, **kwargs):
+        """
+        Oyun yükleme işlemi - Rate limited.
+        """
+        # Rate limit headers ekle
+        headers = get_rate_limit_headers(request, 'upload', '5/h')
+        
         # Oyun başlığını ve isteği yapan kullanıcıyı al
         # request.data dosya yüklemelerinde QueryDict olabilir, .get() ile almak daha güvenli.
         title = request.data.get('title')
@@ -139,14 +151,27 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
 
         # Eğer bu başlıkla bu kullanıcıya ait bir oyun zaten varsa, hata döndür
         if title and Game.objects.filter(creator=creator, title=title.strip()).exists():
-            return Response(
+            response = Response(
                 {"title": ["Bu başlıkla zaten bir oyununuz mevcut. Farklı bir başlık seçin."]},
                 status=status.HTTP_400_BAD_REQUEST
             )
+            # Rate limit headers'ı error response'a da ekle
+            for key, value in headers.items():
+                response[key] = value
+            return response
         
-        # Mükerrer değilse, ModelViewSet'in standart create işlemini çağır
-        # Bu, serializer'ı oluşturacak, is_valid() çağıracak, perform_create'i çağıracak vb.
-        return super().create(request, *args, **kwargs)
+        # Mükerrer değilse, serializer validation ve creation
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        response = Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        # Rate limit headers'ı response'a ekle
+        for key, value in headers.items():
+            response[key] = value
+            
+        return response
 
     def perform_create(self, serializer):
         """
@@ -231,29 +256,43 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
     # --- Özel Aksiyonlar (Rating ve Reporting) ---
 
     @action(detail=True, methods=['post'], url_path='rate')  # url_path'i değiştirdim
+    @api_rate_limit(group='rating', rate='100/h', methods=['POST'], key='user')
     def rate_game(self, request, id=None):  # lookup_field 'id' olduğu için parametre 'id'
         """
         Belirli bir oyuna oy vermek (like/dislike) veya oyu güncellemek için.
         POST isteği ile body'de {"rating_type": 1} (like için) veya {"rating_type": -1} (dislike için) beklenir.
+        Rate limited to prevent spam.
         """
         game = self.get_object()
         user = request.user
+        
+        # Rate limit headers ekle
+        headers = get_rate_limit_headers(request, 'rating', '100/h')
 
         try:
             rating_type_str = request.data.get('rating_type')
             if rating_type_str is None:
-                return Response(
+                response = Response(
                     {"error": "rating_type alanı zorunludur."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+                # Rate limit headers ekle
+                for key, value in headers.items():
+                    response[key] = value
+                return response
+                
             rating_type = int(rating_type_str)
             if rating_type not in [Rating.RatingChoices.LIKE, Rating.RatingChoices.DISLIKE]:
                 raise ValueError("Geçersiz rating_type değeri.")
         except (ValueError, TypeError):
-            return Response(
+            response = Response(
                 {"error": "rating_type alanı integer olarak (1 veya -1) gönderilmelidir."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+            # Rate limit headers ekle
+            for key, value in headers.items():
+                response[key] = value
+            return response
 
         rating_obj, created = Rating.objects.update_or_create(
             user=user, game=game,
@@ -262,58 +301,108 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
 
         serializer = RatingSerializer(rating_obj, context={'request': request})  # context ekledim
         action_taken = "oluşturuldu" if created else "güncellendi"
-        return Response(
+        
+        response = Response(
             {
                 "message": f"Oyun için oyunuz başarıyla {action_taken}.",
                 "rating": serializer.data
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
         )
+        
+        # Rate limit headers ekle
+        for key, value in headers.items():
+            response[key] = value
+            
+        return response
 
     @action(detail=True, methods=['delete'], url_path='unrate')  # url_path'i değiştirdim
+    @api_rate_limit(group='rating', rate='100/h', methods=['DELETE'], key='user')
     def unrate_game(self, request, id=None):  # lookup_field 'id' olduğu için parametre 'id'
         """
         Kullanıcının belirli bir oyuna verdiği oyu silmek için.
+        Rate limited to prevent spam.
         """
         game = self.get_object()
         user = request.user
+        
+        # Rate limit headers ekle
+        headers = get_rate_limit_headers(request, 'rating', '100/h')
 
         try:
             rating_to_delete = Rating.objects.get(user=user, game=game)
             rating_to_delete.delete()  # Signal burada tetiklenip sayaçları güncellemeli
-            return Response(
+            
+            response = Response(
                 {"message": "Oyunuz başarıyla kaldırıldı."},
                 status=status.HTTP_204_NO_CONTENT
             )
+            
+            # Rate limit headers ekle
+            for key, value in headers.items():
+                response[key] = value
+                
+            return response
+            
         except Rating.DoesNotExist:
-            return Response(
+            response = Response(
                 {"error": "Bu oyuna verilmiş bir oyunuz bulunmamaktadır."},
                 status=status.HTTP_404_NOT_FOUND
             )
+            
+            # Rate limit headers ekle
+            for key, value in headers.items():
+                response[key] = value
+                
+            return response
         
     @action(detail=True, methods=['post'], url_path='report')  # url_path'i değiştirdim
+    @api_rate_limit(group='report', rate='20/h', methods=['POST'], key='user')
     def report_game(self, request, id=None):  # lookup_field 'id' olduğu için parametre 'id'
         """
         Belirli bir oyunu raporlamak için.
         POST isteği ile body'de {"reason": "BUG", "description": "Optional details..."} beklenir.
+        Rate limited to prevent abuse.
         """
         game = self.get_object()
         user = request.user
+        
+        # Rate limit headers ekle
+        headers = get_rate_limit_headers(request, 'report', '20/h')
 
         serializer = ReportSerializer(data=request.data, context={'request': request})  # context ekledim
         if serializer.is_valid():
             serializer.save(reporter=user, game=game)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            response = Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+            # Rate limit headers ekle
+            for key, value in headers.items():
+                response[key] = value
+                
+            return response
+            
+        response = Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Rate limit headers ekle
+        for key, value in headers.items():
+            response[key] = value
+            
+        return response
     
     # --- increment_play_count düzeltmesi ---
     @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], url_path='increment_play_count')
+    @api_rate_limit(group='play_count', rate='300/h', methods=['POST'], key='ip')
     def increment_play_count(self, request, id=None):  # lookup_field 'id' ise parametre 'id'
         """
         Oyun oynanma sayısını artır.
         Bu endpoint frontend'den oyun başlatıldığında çağrılacak.
+        Rate limited to prevent artificial inflation.
         """
         game = self.get_object()
+        
+        # Rate limit headers ekle
+        headers = get_rate_limit_headers(request, 'play_count', '300/h')
         
         # Güvenlik: Aynı kullanıcının art arda birden fazla kez
         # play_count'u artırmasını önlemek için rate limiting uygulanabilir.
@@ -325,54 +414,29 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
         # Güncellenmiş oyunu yeniden al
         game.refresh_from_db()
         
-        return Response({
+        response = Response({
             'detail': 'Oynanma sayısı başarıyla artırıldı.',
             'game_id': str(game.id),
             'new_play_count': game.play_count
         }, status=status.HTTP_200_OK)
+        
+        # Rate limit headers ekle
+        for key, value in headers.items():
+            response[key] = value
+            
+        return response
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='my-liked')
+    @api_rate_limit(group='general', rate='200/h', methods=['GET'], key='user')
     def my_liked_games(self, request):
         """
-        Giriş yapmış kullanıcının beğendiği (like verdiği) oyunları listeler.
-        Frontend'de "Beğendiklerim" sayfası için kullanılabilir.
-        
-        Query Parameters:
-        - Tüm GameFilter parametreleri geçerli (genre, tag, search, ordering, vb.)
-        - Pagination da desteklenir
-        
-        Returns:
-        - Kullanıcının like verdiği oyunların listesi
-        - Her oyun için GameSerializer formatında veri
-        
-        Security:
-        - Requires authentication
-        - Only returns user's own liked games
+        Kullanıcının beğendiği oyunları listeler.
+        Rate limited for performance protection.
         """
-        # Explicit authentication check (best practice)
-        if not request.user.is_authenticated:
-            return Response(
-                {
-                    'error': 'Authentication required',
-                    'detail': 'You must be logged in to view your liked games.',
-                    'code': 'authentication_required'
-                },
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-        
         user = request.user
         
-        # Additional safety check for AnonymousUser
-        from django.contrib.auth.models import AnonymousUser
-        if isinstance(user, AnonymousUser):
-            return Response(
-                {
-                    'error': 'Invalid user session',
-                    'detail': 'User session is invalid. Please log in again.',
-                    'code': 'invalid_session'
-                },
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+        # Rate limit headers ekle
+        headers = get_rate_limit_headers(request, 'general', '200/h')
         
         try:
             # Kullanıcının like verdiği oyunları al
@@ -386,7 +450,7 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
             
             if not liked_game_ids.exists():
                 # Return empty response if no liked games
-                return Response(
+                response = Response(
                     {
                         'count': 0,
                         'results': [],
@@ -394,6 +458,12 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
                     },
                     status=status.HTTP_200_OK
                 )
+                
+                # Rate limit headers ekle
+                for key, value in headers.items():
+                    response[key] = value
+                    
+                return response
             
             # Bu oyunları Game modelinden al
             queryset = Game.objects.filter(id__in=liked_game_ids)
@@ -416,19 +486,31 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
             page = self.paginate_queryset(queryset)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response(serializer.data)
+                response = self.get_paginated_response(serializer.data)
+                
+                # Rate limit headers ekle
+                for key, value in headers.items():
+                    response[key] = value
+                    
+                return response
             
             # Pagination yoksa normal response
             serializer = self.get_serializer(queryset, many=True)
-            return Response({
+            response = Response({
                 'count': queryset.count(),
                 'results': serializer.data,
                 'message': f'Found {queryset.count()} liked games.'
             }, status=status.HTTP_200_OK)
             
+            # Rate limit headers ekle
+            for key, value in headers.items():
+                response[key] = value
+                
+            return response
+            
         except Rating.DoesNotExist:
             # This shouldn't happen with exists() check, but defensive programming
-            return Response(
+            response = Response(
                 {
                     'count': 0,
                     'results': [],
@@ -436,13 +518,20 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
                 },
                 status=status.HTTP_200_OK
             )
+            
+            # Rate limit headers ekle
+            for key, value in headers.items():
+                response[key] = value
+                
+            return response
+            
         except Exception as e:
             # Log the error for debugging (in production, use proper logging)
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Error in my_liked_games for user {user.id}: {str(e)}", exc_info=True)
             
-            return Response(
+            response = Response(
                 {
                     'error': 'Internal server error',
                     'detail': 'An unexpected error occurred while fetching your liked games.',
@@ -450,6 +539,12 @@ class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+            
+            # Rate limit headers ekle
+            for key, value in headers.items():
+                response[key] = value
+                
+            return response
 
 class MyGamesAnalyticsListView(generics.ListAPIView):
     """

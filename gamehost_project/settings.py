@@ -66,6 +66,7 @@ CACHES = {  # Bu produksiyon ortamında Redis veya Memcached gibi bir cache kull
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # CORS middleware should be as high as possible
     'gamehost_project.middleware.CORSSecurityMiddleware',  # Custom CORS security checks
+    'gamehost_project.rate_limiting.GlobalRateLimitMiddleware',  # Global rate limiting
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -399,4 +400,126 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:3000",
     # Add your production domains here:
     # "https://yourdomain.com",
+]
+
+# =============================================================================
+# RATE LIMITING CONFIGURATION
+# =============================================================================
+
+# DRF Throttling Settings
+REST_FRAMEWORK.update({
+    'DEFAULT_THROTTLE_CLASSES': [
+        'gamehost_project.rate_limiting.AuthenticatedUserThrottle',
+        'gamehost_project.rate_limiting.AnonUserThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        # General throttles
+        'user': '1000/hour',      # Authenticated users: 1000 requests/hour
+        'anon': '200/hour',       # Anonymous users: 200 requests/hour
+        
+        # Specific action throttles
+        'login': '10/hour',       # Login attempts: 10/hour per IP
+        'game_upload': '5/hour',  # Game uploads: 5/hour per user
+        'rating': '100/hour',     # Game ratings: 100/hour per user
+        'report': '20/hour',      # Game reports: 20/hour per user
+        'search': '100/hour',     # Search queries: 100/hour per IP
+        
+        # Administrative throttles
+        'admin': '2000/hour',     # Admin users: higher limits
+        'burst': '60/min',        # Short burst protection: 60/min
+    }
+})
+
+# Cache Configuration for Rate Limiting
+# Using database cache as fallback, but Redis is recommended for production
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'cache_table',
+        'OPTIONS': {
+            'MAX_ENTRIES': 10000,
+            'CULL_FREQUENCY': 3,  # Remove 1/3 of entries when MAX_ENTRIES reached
+        },
+        'TIMEOUT': 3600,  # Default cache timeout: 1 hour
+    },
+    'rate_limit': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'rate_limit_cache',
+        'OPTIONS': {
+            'MAX_ENTRIES': 50000,  # Higher capacity for rate limiting
+            'CULL_FREQUENCY': 4,
+        },
+        'TIMEOUT': 7200,  # 2 hours for rate limit data
+    }
+}
+
+# Rate Limiting Middleware Configuration
+RATE_LIMIT_MIDDLEWARE_ENABLED = True
+
+# Rate limiting bypass for certain IP addresses (use with caution)
+RATE_LIMIT_WHITELIST_IPS = [
+    '127.0.0.1',          # Localhost
+    '::1',                # IPv6 localhost
+    # Add your admin/monitoring IPs here
+]
+
+# Rate limiting configuration per endpoint type
+RATE_LIMIT_CONFIGS = {
+    'api_general': {
+        'rate': '500/h',
+        'key': 'ip',
+        'methods': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    },
+    'auth_endpoints': {
+        'rate': '20/h',
+        'key': 'ip',
+        'methods': ['POST'],
+    },
+    'game_actions': {
+        'rate': '100/h',
+        'key': 'user_or_ip',
+        'methods': ['POST', 'PUT', 'PATCH', 'DELETE'],
+    },
+    'file_uploads': {
+        'rate': '10/h',
+        'key': 'user',
+        'methods': ['POST'],
+    }
+}
+
+# Rate limiting logging
+RATE_LIMIT_LOGGING = {
+    'log_violations': True,
+    'log_attempts': False,      # Set to True for debugging
+    'log_level': 'WARNING',
+    'include_user_agent': True,
+    'include_headers': False,   # Set to True for debugging
+}
+
+# =============================================================================
+# DJANGO-RATELIMIT CONFIGURATION
+# =============================================================================
+
+# Cache backend for django-ratelimit
+RATELIMIT_USE_CACHE = 'rate_limit'
+
+# Enable rate limiting globally
+RATELIMIT_ENABLE = True
+
+# Rate limit view configuration
+RATELIMIT_VIEW = 'gamehost_project.rate_limiting.ratelimit_handler'
+
+# Skip rate limiting for certain user agents (bots, health checks)
+RATELIMIT_SKIP_USER_AGENTS = [
+    'HealthChecker',
+    'UptimeRobot',
+    'Pingdom',
+    'StatusCake',
+]
+
+# Skip rate limiting for certain request paths
+RATELIMIT_SKIP_PATHS = [
+    '/health/',
+    '/status/',
+    '/admin/jsi18n/',  # Django admin JavaScript translations
 ]
