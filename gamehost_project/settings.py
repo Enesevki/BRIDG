@@ -235,6 +235,10 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
     ],
     
+    # Pagination for performance optimization
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,  # 20 items per page for optimal performance
+    
     # Custom exception handler
     'EXCEPTION_HANDLER': 'games.utils.custom_exception_handler',
     

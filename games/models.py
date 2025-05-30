@@ -169,6 +169,27 @@ class Game(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        
+        # Database indexes for performance optimization
+        indexes = [
+            # Critical indexes for common queries
+            models.Index(fields=['is_published']),                    # Most important - publication filtering
+            models.Index(fields=['created_at']),                     # Ordering by creation date
+            models.Index(fields=['is_published', 'created_at']),     # Combined index for published games ordering
+            models.Index(fields=['creator']),                        # User's games filtering
+            models.Index(fields=['creator', 'is_published']),        # User's published games
+            
+            # Performance indexes for popular features
+            models.Index(fields=['play_count']),                     # Popular games sorting
+            models.Index(fields=['likes_count']),                    # Top rated games
+            models.Index(fields=['view_count']),                     # Most viewed games
+            models.Index(fields=['moderation_status']),              # Admin moderation filtering
+            
+            # Compound indexes for complex queries
+            models.Index(fields=['is_published', '-created_at']),    # Latest published games (most common)
+            models.Index(fields=['is_published', '-play_count']),    # Most played published games
+            models.Index(fields=['is_published', '-likes_count']),   # Top rated published games
+        ]
 
     def __str__(self):
         return f"{self.title} (by {self.creator.username})"
