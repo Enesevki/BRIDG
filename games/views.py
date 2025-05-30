@@ -10,10 +10,14 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser  # Dosya yüklemeleri için
 from django.db.models import F, Q, Count  # Count ve Q'yu import etmeyi unutmayın
+from django_filters.rest_framework import DjangoFilterBackend  # Django Filter backend
+from rest_framework import filters  # DRF'nin kendi filtreleri
 from .models import Game, Genre, Tag  # Model importları
 from .serializers import (  # Serializer importları
     GameSerializer, GenreSerializer, TagSerializer, GameUpdateSerializer, MyGameAnalyticsSerializer
 )
+from .filters import GameFilter  # Kendi filter'ımızı import edelim
+from .utils import FilterValidationMixin  # Custom utils import
 from django.core.files.storage import default_storage
 import os
 import shutil
@@ -37,9 +41,16 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
 
-class GameViewSet(viewsets.ModelViewSet):
+class GameViewSet(FilterValidationMixin, viewsets.ModelViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     lookup_field = 'id'  # Primary key alanımızın adı 'id' olduğu için
+
+    # Filtering, Search, and Ordering
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = GameFilter
+    search_fields = ['title', 'description', 'creator__username']
+    ordering_fields = ['created_at', 'updated_at', 'title', 'likes_count', 'dislikes_count', 'play_count', 'view_count']
+    ordering = ['-created_at']  # Default ordering
 
     # Ana queryset'i burada tanımlıyoruz. get_queryset() bunu daha da filtreleyecek.
     # Sinyallerle likes_count ve dislikes_count'u güncellediğimiz için,
@@ -299,32 +310,146 @@ class GameViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], url_path='increment_play_count')
     def increment_play_count(self, request, id=None):  # lookup_field 'id' ise parametre 'id'
         """
-        Belirli bir oyunun play_count'unu bir artırır.
-        Bu endpoint, oyun istemcisi (Unity/React) tarafından oyun başladığında çağrılır.
-        Rate limited to 5 requests per minute per IP address.
+        Oyun oynanma sayısını artır.
+        Bu endpoint frontend'den oyun başlatıldığında çağrılacak.
         """
-        # Check if rate limited
-        from django_ratelimit.core import is_ratelimited
-        if is_ratelimited(request=request, group='increment_play_count', fn=None, key='ip', rate='5/m', method='POST', increment=True):
+        game = self.get_object()
+        
+        # Güvenlik: Aynı kullanıcının art arda birden fazla kez
+        # play_count'u artırmasını önlemek için rate limiting uygulanabilir.
+        # Şimdilik basit increment yapıyoruz.
+        
+        # F() kullanarak atomik güncelleme (race condition'ı önler)
+        Game.objects.filter(id=game.id).update(play_count=F('play_count') + 1)
+        
+        # Güncellenmiş oyunu yeniden al
+        game.refresh_from_db()
+        
+        return Response({
+            'detail': 'Oynanma sayısı başarıyla artırıldı.',
+            'game_id': str(game.id),
+            'new_play_count': game.play_count
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='my-liked')
+    def my_liked_games(self, request):
+        """
+        Giriş yapmış kullanıcının beğendiği (like verdiği) oyunları listeler.
+        Frontend'de "Beğendiklerim" sayfası için kullanılabilir.
+        
+        Query Parameters:
+        - Tüm GameFilter parametreleri geçerli (genre, tag, search, ordering, vb.)
+        - Pagination da desteklenir
+        
+        Returns:
+        - Kullanıcının like verdiği oyunların listesi
+        - Her oyun için GameSerializer formatında veri
+        
+        Security:
+        - Requires authentication
+        - Only returns user's own liked games
+        """
+        # Explicit authentication check (best practice)
+        if not request.user.is_authenticated:
             return Response(
-                {"error": "Rate limit exceeded. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                {
+                    'error': 'Authentication required',
+                    'detail': 'You must be logged in to view your liked games.',
+                    'code': 'authentication_required'
+                },
+                status=status.HTTP_401_UNAUTHORIZED
             )
         
-        try:  # Hata yakalamayı ekleyelim
-            game = self.get_object()  # Oyunu getirir
-
-            # Atomik olarak play_count'u artır
-            Game.objects.filter(pk=game.pk).update(play_count=F('play_count') + 1)
+        user = request.user
+        
+        # Additional safety check for AnonymousUser
+        from django.contrib.auth.models import AnonymousUser
+        if isinstance(user, AnonymousUser):
+            return Response(
+                {
+                    'error': 'Invalid user session',
+                    'detail': 'User session is invalid. Please log in again.',
+                    'code': 'invalid_session'
+                },
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        try:
+            # Kullanıcının like verdiği oyunları al
+            from interactions.models import Rating
             
-            return Response({"message": "Play count incremented successfully."}, status=status.HTTP_200_OK)
-        except Game.DoesNotExist:  # get_object() 404 fırlatır, bu yakalama DRF tarafından yönetilir.
-                                  # Ancak burada açıkça yakalamak debug için faydalı olabilir.
-            return Response({"error": "Game not found."}, status=status.HTTP_404_NOT_FOUND)
+            # Use explicit user ID to avoid any casting issues
+            liked_game_ids = Rating.objects.filter(
+                user_id=user.id,  # Use user_id instead of user object
+                rating_type=Rating.RatingChoices.LIKE
+            ).values_list('game_id', flat=True)
+            
+            if not liked_game_ids.exists():
+                # Return empty response if no liked games
+                return Response(
+                    {
+                        'count': 0,
+                        'results': [],
+                        'message': 'You haven\'t liked any games yet.'
+                    },
+                    status=status.HTTP_200_OK
+                )
+            
+            # Bu oyunları Game modelinden al
+            queryset = Game.objects.filter(id__in=liked_game_ids)
+            
+            # Normal izin kontrollerini uygula (yayınlanmamış oyunları filtrele vs.)
+            # get_queryset metodunu çağırarak mevcut izin mantığını kullan
+            base_queryset = self.get_queryset()
+            queryset = queryset.filter(id__in=base_queryset.values_list('id', flat=True))
+            
+            # Performance optimization: select related data
+            queryset = queryset.select_related('creator').prefetch_related('genres', 'tags')
+            
+            # Filtreleme uygula (django-filter)
+            queryset = self.filter_queryset(queryset)
+            
+            # Default ordering for consistent results
+            queryset = queryset.order_by('-created_at')
+            
+            # Pagination uygula
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            # Pagination yoksa normal response
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'count': queryset.count(),
+                'results': serializer.data,
+                'message': f'Found {queryset.count()} liked games.'
+            }, status=status.HTTP_200_OK)
+            
+        except Rating.DoesNotExist:
+            # This shouldn't happen with exists() check, but defensive programming
+            return Response(
+                {
+                    'count': 0,
+                    'results': [],
+                    'message': 'No liked games found.'
+                },
+                status=status.HTTP_200_OK
+            )
         except Exception as e:
-            # Beklenmedik bir hata olursa loglayıp genel bir hata mesajı dönelim
-            print(f"Error in increment_play_count for game {id}: {e}")  # Gerçek bir projede logging kullanın
-            return Response({"error": "An unexpected error occurred while incrementing play count."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Log the error for debugging (in production, use proper logging)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in my_liked_games for user {user.id}: {str(e)}", exc_info=True)
+            
+            return Response(
+                {
+                    'error': 'Internal server error',
+                    'detail': 'An unexpected error occurred while fetching your liked games.',
+                    'code': 'server_error'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class MyGamesAnalyticsListView(generics.ListAPIView):
     """
