@@ -10,364 +10,324 @@ from django.conf import settings  # MEDIA_URL ve STATIC_URL için (settings.DEBU
 from django.core.files.storage import default_storage
 import zipfile
 import os
+import logging
 
 # File Security Import - Light & Powerful
 from .security import validate_game_upload, FileSecurityError
+from .input_validation import (  # NEW: Input validation & sanitization
+    TextValidator, DataValidator, FormValidator, InputSecurityError,
+    validate_request_data, sanitize_input
+)
+from users.serializers import UserSerializer  # Import from users app
 
+logger = logging.getLogger(__name__)
 
-# --- Yardımcı Fonksiyon (Sınıf Dışında, Dosyanın Başında) ---
-def find_zip_root_folder(file_list_from_zip):
+# =============================================================================
+# Yardımcı Fonksiyon (Validation için)
+# =============================================================================
+
+def find_zip_root_folder(file_list):
     """
-    Verilen dosya listesinden (zip içinden) potansiyel bir kök klasör belirler.
-    Eğer tüm dosyalar tek bir ana klasör altındaysa, o klasörün adını döndürür (sonunda '/' ile).
-    Aksi takdirde boş string "" döndürür (dosyalar zip'in kökündedir).
+    ZIP dosyasındaki dosya listesini analiz ederek muhtemel kök klasörü bulur.
     """
-    if not file_list_from_zip:
+    if not file_list:
         return ""
-
-    # os.path.commonprefix tüm yollar için ortak en uzun öneki bulur.
-    # Örneğin: ["MyGame/index.html", "MyGame/Build/", "MyGame/TemplateData/"] -> "MyGame/"
-    # Örneğin: ["index.html", "Build/", "TemplateData/"] -> ""
-    # Örneğin: ["Game1/file.txt", "Game2/file.txt"] -> "" (çünkü ortak klasör yok)
-    # Örneğin: ["MyGame/file.txt", "MyGame/"] -> "MyGame/"
     
-    prefix = os.path.commonprefix(file_list_from_zip)
-
-    if not prefix:  # Ortak bir önek yoksa, kök dizin varsayılır.
-        return ""
-
-    # Eğer prefix bir klasörse (sonunda '/' varsa) ve tüm dosyalar bu prefix ile başlıyorsa
-    if prefix.endswith('/') and all(f.startswith(prefix) for f in file_list_from_zip):
-        return prefix
+    # En yaygın kök klasörü bul
+    root_folders = set()
+    for file_path in file_list:
+        if '/' in file_path:
+            root_folder = file_path.split('/')[0] + '/'
+            root_folders.add(root_folder)
     
-    # Eğer prefix bir dosya yolunun bir parçasıysa (örn: "MyGame/Build")
-    # ve potansiyel bir kök klasör oluşturuyorsa.
-    # dirname("MyGame/Build") -> "MyGame"
-    # dirname("MyGame/") -> "MyGame" (bunu istemiyoruz, son / önemli)
-    # dirname("MyGame") -> ""
+    if len(root_folders) == 1:
+        return list(root_folders)[0]
     
-    # commonprefix'in sonu '/' değilse ama içinde '/' varsa, bir üst dizini almayı dene
-    if '/' in prefix:
-        # rstrip('/') ile sondaki olası '/' kaldırılır, sonra dirname alınır, sonra tekrar '/' eklenir.
-        # "MyGame/Build/file.js" -> "MyGame/Build" -> "MyGame/"
-        # "MyGame/index.html" -> "MyGame" -> "MyGame/" (eğer commonprefix "MyGame/index.html" ise)
-        potential_dir_from_prefix = os.path.dirname(prefix.rstrip('/'))
-        if potential_dir_from_prefix:  # Eğer bir üst klasör adı varsa ("" değilse)
-            root_candidate = potential_dir_from_prefix + '/'
-            if all(f.startswith(root_candidate) for f in file_list_from_zip):
-                return root_candidate
-    
-    # Yukarıdaki koşullar sağlanmazsa, dosyaların zip'in kökünde olduğunu varsay
-    return ""
-# --- Yardımcı Fonksiyon Sonu ---
+    return ""  # Kök klasör yok veya belirsiz
 
+# =============================================================================
+# Base Serializers with Input Validation
+# =============================================================================
+
+class BaseValidationMixin:
+    """Mixin to add input validation to serializers"""
+    
+    def validate(self, data):
+        """Apply comprehensive input validation"""
+        try:
+            # Get the validation type based on serializer class
+            if hasattr(self, 'get_validation_type'):
+                validation_type = self.get_validation_type()
+                
+                # Detect if this is a partial update (PATCH request)
+                is_partial = getattr(self, 'partial', False)
+                
+                data = validate_request_data(data, validation_type, is_partial=is_partial)
+            
+            # Call parent validation
+            data = super().validate(data)
+            
+            return data
+            
+        except InputSecurityError as e:
+            logger.warning(f"Input validation failed: {e}")
+            raise serializers.ValidationError(str(e))
+
+
+# =============================================================================
+# Game-related Serializers
+# =============================================================================
 
 class GenreSerializer(serializers.ModelSerializer):
-    """
-    Genre modeli için serializer.
-    Modelin tüm alanlarını JSON'a dönüştürür.
-    """
+    """Genre serializer with basic validation"""
     class Meta:
         model = Genre
         fields = ['id', 'name', 'slug']
-        # Eğer tüm alanları dahil etmek isterseniz:
-        # fields = '__all__'
 
 
 class TagSerializer(serializers.ModelSerializer):
-    """
-    Tag modeli için serializer.
-    Modelin tüm alanlarını JSON'a dönüştürür.
-    """
+    """Tag serializer with basic validation"""
     class Meta:
         model = Tag
         fields = ['id', 'name', 'slug']
-        # fields = '__all__'
 
 
-class GameCreatorSerializer(serializers.ModelSerializer):
+class GameSerializer(BaseValidationMixin, serializers.ModelSerializer):
     """
-    Oyunun yaratıcısı (User modeli) için basit bir serializer.
-    Sadece gerekli bilgileri (id ve username) gösterir.
+    Oyun oluşturma ve listeleme için serializer - Enhanced with input validation
     """
-    class Meta:
-        model = User
-        fields = ['id', 'username']
-
-
-class GameUpdateSerializer(serializers.ModelSerializer):
-    """
-    Oyun güncelleme işlemleri için serializer.
-    Sadece kullanıcı tarafından güncellenebilecek alanları içerir.
-    Zip dosyası, yayın durumu, moderasyon durumu vb. buradan güncellenemez.
-    """
-    # Yazma işlemleri için (PUT/PATCH)
-    genre_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Genre.objects.all(),
-        many=True,
-        source='genres',
-        required=False,  # Güncelleme sırasında zorunlu değil (PATCH için)
-        allow_empty=True,  # Geçici olarak True, validasyonla kontrol edilecek
-        error_messages={
-            'does_not_exist': 'Geçersiz tür ID: {pk_value}.',
-            'incorrect_type': 'Tür ID\'leri bir liste olmalıdır.'
-        }
-    )
-    tag_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Tag.objects.all(),
-        many=True,
-        source='tags',
-        required=False,  # Güncelleme sırasında zorunlu değil (PATCH için)
-        allow_empty=True,  # Geçici olarak True, validasyonla kontrol edilecek
-        error_messages={
-            'does_not_exist': 'Geçersiz etiket ID: {pk_value}.',
-            'incorrect_type': 'Etiket ID\'leri bir liste olmalıdır.'
-        }
-    )
-
-    class Meta:
-        model = Game
-        fields = [
-            'title', 
-            'description', 
-            'thumbnail',  # Kullanıcı yeni thumbnail yükleyebilir veya kaldırabilir
-            'genre_ids',  # Kullanıcı türleri güncelleyebilir
-            'tag_ids',    # Kullanıcı etiketleri güncelleyebilir
-        ]
-        # Diğer tüm alanlar (id, creator, is_published, moderation_status, webgl_build_zip vb.)
-        # bu serializer tarafından güncellenmeyecektir.
-
-    def validate_genre_ids(self, value):
-        # Eğer genre_ids alanı PATCH isteğinde gönderildiyse ve boş bir listeyse hata ver.
-        # Eğer PUT isteğindeysek ve bu alan gönderildiyse ve boşsa yine hata ver.
-        # ModelSerializer, PUT'ta tüm alanları bekler, PATCH'te sadece gönderilenleri.
-        # 'required=False' PATCH için işe yarar. PUT için bu validasyon önemli.
-        if isinstance(value, list) and not value:
-            # Eğer bu alanın gönderilmesi PUT'ta zorunluysa ve boş liste kabul edilmiyorsa
-            # (ki 'en az bir tane olmalı' demiştik)
-            if not self.partial or (self.partial and 'genre_ids' in self.initial_data):
-                 raise serializers.ValidationError("Oyunun en az bir türü olmalıdır. Tüm türleri silemezsiniz.")
-        return value
-
-    def validate_tag_ids(self, value):
-        if isinstance(value, list) and not value:
-            if not self.partial or (self.partial and 'tag_ids' in self.initial_data):
-                raise serializers.ValidationError("Oyunun en az bir etiketi olmalıdır. Tüm etiketleri silemezsiniz.")
-        return value
-
-
-class GameSerializer(serializers.ModelSerializer):
+    creator = UserSerializer(read_only=True)
     genres = GenreSerializer(many=True, read_only=True)
     tags = TagSerializer(many=True, read_only=True)
-    creator = GameCreatorSerializer(read_only=True)
-
-    thumbnail_url = serializers.SerializerMethodField()
+    
+    # Write-only fields for creation
+    genre_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True,
+        help_text="List of genre IDs to associate with this game"
+    )
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True,
+        help_text="List of tag IDs to associate with this game"
+    )
+    
+    # Additional computed fields
     game_file_url = serializers.SerializerMethodField()
-    entry_point_url = serializers.SerializerMethodField()  # Oyunun oynanabilir URL'si
-
-    # YENİ: moderation_status_display'i SerializerMethodField olarak tanımla
-    moderation_status_display = serializers.SerializerMethodField() 
-
-    genre_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Genre.objects.all(),
-        many=True,
-        write_only=True,
-        source='genres',
-        required=True,
-        # allow_empty=False ekleyerek boş liste gönderilmesini de engelleyebiliriz.
-        allow_empty=False,  # Boş bir liste ([]) gönderilmesini engeller
-        error_messages={  # Özel hata mesajları
-            'required': 'En az bir tür seçilmelidir.',
-            'empty': 'En az bir tür seçilmelidir (boş liste gönderilemez).',
-            'does_not_exist': 'Geçersiz tür ID: {pk_value}.',  # Geçersiz ID için
-            'incorrect_type': 'Tür ID\'leri bir liste olmalıdır.'  # Yanlış tipte veri için
-        }
-    )
-    tag_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Tag.objects.all(),
-        many=True,
-        write_only=True,
-        source='tags',
-        required=True,
-        allow_empty=False,  # Boş bir liste ([]) gönderilmesini engeller
-        error_messages={
-            'required': 'En az bir etiket seçilmelidir.',
-            'empty': 'En az bir etiket seçilmelidir (boş liste gönderilemez).',
-            'does_not_exist': 'Geçersiz etiket ID: {pk_value}.',
-            'incorrect_type': 'Etiket ID\'leri bir liste olmalıdır.'
-        }
-    )
-
+    entry_point_url = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = Game
         fields = [
             'id', 'title', 'description', 'creator', 'genres', 'tags',
-            'genre_ids', 'tag_ids', 'thumbnail', 'thumbnail_url',
-            'webgl_build_zip', 'game_file_url', 'entry_point_path', 'entry_point_url',
-            'is_published', 'moderation_status', 'moderation_status_display',  # moderation_status_display eklendi
-            'created_at', 'updated_at',
-            'likes_count', 'dislikes_count', 'play_count', 'view_count',
+            'webgl_build_zip', 'thumbnail', 'is_published', 'moderation_status',
+            'created_at', 'updated_at', 'likes_count', 'dislikes_count',
+            'play_count', 'view_count', 'entry_point_path',
+            'game_file_url', 'entry_point_url', 'thumbnail_url',
+            'genre_ids', 'tag_ids'  # Write-only fields
         ]
         read_only_fields = [
-            'id', 'creator', 'created_at', 'updated_at',
-            'likes_count', 'dislikes_count', 'play_count', 'view_count',
-            'thumbnail_url', 'game_file_url', 'entry_point_path', 'entry_point_url',
-            'moderation_status_display',  # Bu da read_only
-            # is_published ve moderation_status GameUpdateSerializer'da yönetilecek
+            'id', 'creator', 'created_at', 'updated_at', 'likes_count',
+            'dislikes_count', 'play_count', 'view_count', 'entry_point_path',
+            'moderation_status'
         ]
-
-    def get_thumbnail_url(self, obj):
-        """
-        Oyunun thumbnail'ı için tam URL döndürür.
-        Eğer oyunun kendi thumbnail'ı yoksa, varsayılan bir logo URL'si döndürür.
-        """
-        request = self.context.get('request')
-        if obj.thumbnail and hasattr(obj.thumbnail, 'url') and obj.thumbnail.name:  # .name ile dosyanın varlığını kontrol et
-            # Kullanıcının yüklediği thumbnail var
-            thumbnail_actual_url = obj.thumbnail.url  # Bu MEDIA_URL + dosya_yolu şeklinde gelir
-            if request is not None:
-                return request.build_absolute_uri(thumbnail_actual_url)
-            return thumbnail_actual_url  # Request context yoksa (testler vb.)
-        else:
-            # Varsayılan thumbnail URL'si
-            try:
-                default_thumbnail_relative_path = static('static/images/bridg-default-game-thumbnail.png')
-            except Exception as e:
-                # Eğer static dosya bulunamazsa (yanlış yol vb.) veya bir hata olursa
-                print(f"HATA: Varsayılan thumbnail static dosyası bulunamadı veya static tag hata verdi: {e}")
-                return None  # Veya boş bir string, veya frontend'in handle edeceği bir placeholder
-
-            if request is not None:
-                return request.build_absolute_uri(default_thumbnail_relative_path)
-            return default_thumbnail_relative_pat
-
-    def get_game_file_url(self, obj):
-        request = self.context.get('request')
-        if obj.webgl_build_zip and hasattr(obj.webgl_build_zip, 'url'):
-            if request is not None:
-                return request.build_absolute_uri(obj.webgl_build_zip.url)
-            return obj.webgl_build_zip.url
-        return None
-
-    def get_entry_point_url(self, obj):
-        request = self.context.get('request')
-        if obj.entry_point_path:
-            # default_storage.url(), MEDIA_URL'i başına ekleyerek tam URL'yi oluşturur.
-            try:
-                full_url = default_storage.url(obj.entry_point_path)
-                if request is not None:
-                    # Eğer full_url zaten http ile başlamıyorsa (yerel storage gibi)
-                    if not full_url.startswith(('http://', 'https://')):
-                         return request.build_absolute_uri(full_url)
-                    return full_url  # S3 gibi durumlarda zaten tam URL dönebilir
-                return full_url
-            except Exception:  # URL oluşturulamazsa (örn: dosya yok)
-                return None
-        return None
     
-    def get_moderation_status_display(self, obj):  # Bu metot zaten vardı
-        """Game modelindeki get_moderation_status_display() metodunu çağırır."""
-        return obj.get_moderation_status_display()
-
-    def validate_webgl_build_zip(self, value):  # value burada InMemoryUploadedFile objesi
-        if value is None: 
+    def get_validation_type(self):
+        """Return validation type for BaseValidationMixin"""
+        return 'game'
+    
+    def validate_title(self, value):
+        """Validate game title with enhanced security"""
+        try:
+            return TextValidator.validate_game_title(value)
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def validate_description(self, value):
+        """Validate game description with enhanced security"""
+        try:
+            return TextValidator.validate_game_description(value)
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def validate_genre_ids(self, value):
+        """Validate genre IDs"""
+        try:
+            validated_ids = DataValidator.validate_id_list(value, 'genre', max_count=5)
+            
+            # Check if all genre IDs exist
+            existing_genres = Genre.objects.filter(id__in=validated_ids)
+            if len(existing_genres) != len(validated_ids):
+                existing_ids = [g.id for g in existing_genres]
+                invalid_ids = [id for id in validated_ids if id not in existing_ids]
+                raise serializers.ValidationError(f"Invalid genre IDs: {invalid_ids}")
+            
+            return validated_ids
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def validate_tag_ids(self, value):
+        """Validate tag IDs"""
+        try:
+            validated_ids = DataValidator.validate_id_list(value, 'tag', max_count=10)
+            
+            # Check if all tag IDs exist
+            existing_tags = Tag.objects.filter(id__in=validated_ids)
+            if len(existing_tags) != len(validated_ids):
+                existing_ids = [t.id for t in existing_tags]
+                invalid_ids = [id for id in validated_ids if id not in existing_ids]
+                raise serializers.ValidationError(f"Invalid tag IDs: {invalid_ids}")
+            
+            return validated_ids
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def validate_webgl_build_zip(self, value):
+        """Enhanced file validation with security checks"""
+        if not value:
             return value
         
-        # 🔒 COMPREHENSIVE FILE SECURITY VALIDATION
+        # Basic file validation
+        if value.size == 0:
+            raise serializers.ValidationError("Uploaded file is empty.")
+        
+        # Apply existing file security validation
         try:
-            # Step 1: Run complete security validation
             validate_game_upload(value)
+            logger.info(f"File security validation passed for: {value.name}")
             
         except FileSecurityError as e:
-            # Convert to DRF ValidationError with detailed message
-            raise serializers.ValidationError(f"Security validation failed: {str(e)}")
+            logger.error(f"File security validation failed for {value.name}: {e}")
+            raise serializers.ValidationError(f"File security validation failed: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected file validation error for {value.name}: {e}")
+            raise serializers.ValidationError(f"File validation failed: {str(e)}")
         
-        # 🎮 WEBGL GAME STRUCTURE VALIDATION
-        # After security checks, validate WebGL game structure
-        max_size_bytes = settings.MAX_GAME_ZIP_SIZE_MB * 1024 * 1024
-        if value.size > max_size_bytes:
-            raise serializers.ValidationError(
-                f"Yüklenen ZIP dosyasının boyutu {settings.MAX_GAME_ZIP_SIZE_MB} MB'ı aşamaz. "
-                f"Sizin dosyanızın boyutu: {round(value.size / (1024 * 1024), 2)} MB."
-            )
-        
-        potential_root_folder_in_zip = ""
+        # WebGL structure validation
         try:
+            # Find root folder in ZIP
+            potential_root_folder_in_zip = ""
             value.seek(0)
             with zipfile.ZipFile(value, 'r') as zip_ref:
                 file_list = zip_ref.namelist()
                 if not file_list:
-                    raise serializers.ValidationError("Yüklenen ZIP dosyası boş.")
+                    raise serializers.ValidationError("Uploaded ZIP file is empty.")
 
-                # Yardımcı fonksiyonu kullanarak kök klasörü bul
                 potential_root_folder_in_zip = find_zip_root_folder(file_list)
 
                 expected_index = potential_root_folder_in_zip + 'index.html'
                 expected_build_dir = potential_root_folder_in_zip + 'Build/'
                 expected_template_data_dir = potential_root_folder_in_zip + 'TemplateData/'
 
-                # Dosya ve klasör varlık kontrolleri
-                if not any(f == expected_index for f in file_list):  # Tam eşleşme
-                    raise serializers.ValidationError(f"Zip dosyası '{expected_index}' dosyasını içermelidir.")
+                # Check required files and folders
+                if not any(f == expected_index for f in file_list):
+                    raise serializers.ValidationError(f"ZIP file must contain '{expected_index}'.")
                 if not any(f.startswith(expected_build_dir) for f in file_list):
-                    raise serializers.ValidationError(f"Zip dosyası '{expected_build_dir}' klasörünü (veya içeriğini) içermelidir.")
+                    raise serializers.ValidationError(f"ZIP file must contain '{expected_build_dir}' folder.")
                 if not any(f.startswith(expected_template_data_dir) for f in file_list):
-                    raise serializers.ValidationError(f"Zip dosyası '{expected_template_data_dir}' klasörünü (veya içeriğini) içermelidir.")
+                    raise serializers.ValidationError(f"ZIP file must contain '{expected_template_data_dir}' folder.")
 
-                # Path traversal kontrolü (additional security layer)
-                for member_name in file_list:
-                    path_to_check = member_name
-                    if potential_root_folder_in_zip and member_name.startswith(potential_root_folder_in_zip):
-                        path_to_check = member_name[len(potential_root_folder_in_zip):]
-                    if path_to_check.startswith('/') or '..' in path_to_check:
-                        raise serializers.ValidationError(f"Zip dosyası geçersiz bir göreli dosya yolu içeriyor: '{member_name}'.")
-        
+            value.seek(0)
+            self._validated_zip_root_folder = potential_root_folder_in_zip
+            
         except zipfile.BadZipFile:
-            raise serializers.ValidationError("Yüklenen dosya geçerli bir ZIP dosyası değil.")
+            raise serializers.ValidationError("Uploaded file is not a valid ZIP archive.")
         except serializers.ValidationError:
             raise
         except Exception as e:
-            raise serializers.ValidationError(f"ZIP dosyası doğrulanırken bir hata oluştu: {str(e)}")
+            raise serializers.ValidationError(f"ZIP file validation error: {str(e)}")
         
-        value.seek(0)
-        # Validasyon başarılı, kök klasör bilgisini bir sonraki aşamaya (create/update) taşımak için
-        # serializer instance'ına geçici bir özellik olarak ekleyebiliriz.
-        # Bu, _process_uploaded_zip'in bu bilgiyi yeniden hesaplamasını önler.
-        self._validated_zip_root_folder = potential_root_folder_in_zip # Geçici özellik
         return value
-
-    def create(self, validated_data):
-        # validated_data'dan _validated_zip_root_folder'ı al (veya varsayılan "")
-        # Eğer validate_webgl_build_zip çağrılmadıysa (örneğin bu alan gönderilmediyse), bu özellik olmayabilir.
-        # Ancak webgl_build_zip zorunlu olduğu için validate_... her zaman çağrılacaktır.
-        zip_root_folder = getattr(self, '_validated_zip_root_folder', "")
-        
-        game_instance = super().create(validated_data)
-        self._process_uploaded_zip(game_instance, zip_root_folder)
-        return game_instance
-
-    def update(self, instance, validated_data):
-        zip_root_folder = getattr(self, '_validated_zip_root_folder', None)
-        # Eğer zip dosyası güncellenmiyorsa (PATCH isteğinde gönderilmediyse),
-        # zip_root_folder None olacak ve _process_uploaded_zip çağrılmayacak (veya çağrılsa da işlem yapmayacak).
-        
-        instance = super().update(instance, validated_data)
-        if 'webgl_build_zip' in validated_data and validated_data['webgl_build_zip'] is not None:
-            if zip_root_folder is None:  # Eğer validate_webgl_build_zip bu update için çağrılmadıysa
-                                        # (örn: sadece zip güncelleniyor, diğer validasyonlar eski)
-                                        # zip_root_folder'ı yeniden hesapla veya hata ver.
-                                        # En iyisi, _validated_zip_root_folder'ın her zaman set edildiğinden emin olmak.
-                                        # validate_webgl_build_zip her zaman çağrılır.
-                zip_root_folder = find_zip_root_folder(instance.webgl_build_zip.namelist()) # Bu satır çalışmaz, instance.webgl_build_zip ZipFile değil.
-                # Doğrusu, eğer zip güncelleniyorsa, validate_webgl_build_zip zaten _validated_zip_root_folder'ı set eder.
+    
+    def validate(self, data):
+        """Enhanced full form validation"""
+        try:
+            # Apply comprehensive input validation
+            data = super().validate(data)
+            
+            # Additional business logic validation
+            if self.instance:
+                # Update validation
+                if 'webgl_build_zip' in data and data['webgl_build_zip']:
+                    raise serializers.ValidationError(
+                        "Game file cannot be updated after initial upload."
+                    )
+            
+            # Check for duplicate titles by the same user
+            title = data.get('title')
+            if title and hasattr(self, 'context') and 'request' in self.context:
+                user = self.context['request'].user
+                existing_game = Game.objects.filter(
+                    creator=user,
+                    title=title
+                ).exclude(id=getattr(self.instance, 'id', None))
                 
-            self._process_uploaded_zip(instance, zip_root_folder if zip_root_folder is not None else "")
-        return instance
-
+                if existing_game.exists():
+                    raise serializers.ValidationError({
+                        "title": "You already have a game with this title."
+                    })
+            
+            return data
+            
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def get_game_file_url(self, obj):
+        """Generate game file URL"""
+        if obj.webgl_build_zip:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.webgl_build_zip.url)
+        return None
+    
+    def get_entry_point_url(self, obj):
+        """Generate game entry point URL"""
+        if obj.entry_point_path:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri('/media/' + obj.entry_point_path)
+        return None
+    
+    def get_thumbnail_url(self, obj):
+        """Generate thumbnail URL with fallback to default"""
+        thumbnail_url = obj.get_thumbnail_url()
+        
+        # If it's a relative URL, make it absolute
+        request = self.context.get('request')
+        if request and not thumbnail_url.startswith(('http://', 'https://')):
+            return request.build_absolute_uri(thumbnail_url)
+        
+        return thumbnail_url
+    
+    def create(self, validated_data):
+        """Create game with M2M relationships and file processing"""
+        # Extract M2M data
+        genre_ids = validated_data.pop('genre_ids', [])
+        tag_ids = validated_data.pop('tag_ids', [])
+        
+        # Create game instance
+        game = Game.objects.create(**validated_data)
+        
+        # Set M2M relationships
+        if genre_ids:
+            game.genres.set(genre_ids)
+        if tag_ids:
+            game.tags.set(tag_ids)
+        
+        # Process uploaded ZIP file
+        zip_root_folder = getattr(self, '_validated_zip_root_folder', "")
+        self._process_uploaded_zip(game, zip_root_folder)
+        
+        logger.info(f"Game created successfully: {game.title} (ID: {game.id})")
+        return game
+    
     def _process_uploaded_zip(self, game_instance, root_folder_in_zip):
+        """Process uploaded ZIP file and extract game contents"""
         zip_file_field = game_instance.webgl_build_zip
         if not zip_file_field or not zip_file_field.name:
-            # ... (hata durumu ve moderasyon status güncellemesi) ...
             game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
             game_instance.save(update_fields=['moderation_status'])
             return
@@ -380,72 +340,182 @@ class GameSerializer(serializers.ModelSerializer):
             with default_storage.open(zip_file_field.name, 'rb') as f_zip:
                 with zipfile.ZipFile(f_zip, 'r') as zip_ref:
                     for member_name_in_zip in zip_ref.namelist():
-                        # Çıkarılacak dosyanın, zip içindeki (varsa) kök klasörden sonraki göreli yolu
+                        # Get relative path inside ZIP content
                         path_inside_zip_content = member_name_in_zip
                         if root_folder_in_zip and member_name_in_zip.startswith(root_folder_in_zip):
                             path_inside_zip_content = member_name_in_zip[len(root_folder_in_zip):]
                         
-                        if not path_inside_zip_content:  # Eğer kök klasörün kendisiyse veya boş bir yolsa atla
+                        if not path_inside_zip_content:  # Skip root folder itself
                             continue
 
-                        # Path traversal kontrolü (tekrar, güvenlik için)
+                        # Path traversal security check
                         if path_inside_zip_content.startswith('/') or '..' in path_inside_zip_content:
-                            print(f"UYARI (çıkarma): Güvenlik riski oluşturan yol '{member_name_in_zip}'. Atlanıyor.")
+                            logger.warning(f"Security risk path '{member_name_in_zip}'. Skipping.")
                             continue
                         
                         target_file_path_on_server = os.path.join(extraction_target_root_on_server, path_inside_zip_content)
 
-                        if not member_name_in_zip.endswith('/'): # Dosya ise
+                        if not member_name_in_zip.endswith('/'):  # It's a file
                             file_data = zip_ref.read(member_name_in_zip)
                             default_storage.save(target_file_path_on_server, ContentFile(file_data))
             
-            # entry_point_path, extraction_target_root_on_server altına çıkarılan 'index.html'in yoludur.
-            # path_inside_zip_content mantığına göre 'index.html' direkt bu kök altında olmalı.
+            # Set entry point path
             game_instance.entry_point_path = os.path.join(extraction_target_root_on_server, 'index.html')
             game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_PASSED
+            
+            # ✅ Admin onayı için bekleyecek (is_published manuel olarak ayarlanacak)
+            # is_published = False olarak kalacak, admin panelden onaylayacak
+            
             game_instance.save(update_fields=['entry_point_path', 'moderation_status'])
-            print(f"Oyun {game_instance.id} için dosyalar başarıyla işlendi. Moderasyon durumu: {game_instance.moderation_status}")
+            
+            logger.info(f"Game {game_instance.id} files processed successfully. Moderation status: {game_instance.moderation_status}. Waiting for admin approval.")
 
         except Exception as e:
-            # ... (hata durumu ve moderasyon status güncellemesi) ...
-            print(f"HATA (çıkarma): Zip dosyası {zip_file_field.name} işlenirken hata: {str(e)}")
+            logger.error(f"ZIP processing error for {zip_file_field.name}: {str(e)}")
             game_instance.moderation_status = Game.ModerationStatusChoices.CHECKS_FAILED
             game_instance.entry_point_path = None
             game_instance.save(update_fields=['moderation_status', 'entry_point_path'])
 
 
-class MyGameAnalyticsSerializer(serializers.ModelSerializer):
+class GameUpdateSerializer(BaseValidationMixin, serializers.ModelSerializer):
     """
-    Kullanıcının kendi oyunlarının temel analitiklerini göstermek için serializer.
+    Oyun güncelleme için serializer - Enhanced validation
     """
-    thumbnail_url = serializers.SerializerMethodField()
-    moderation_status_display = serializers.SerializerMethodField() # <--- BU SATIRI EKLEYİN
-
+    genre_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        help_text="List of genre IDs to associate with this game"
+    )
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        help_text="List of tag IDs to associate with this game"
+    )
+    
     class Meta:
         model = Game
         fields = [
-            'id', 'title', 'thumbnail_url',
-            'is_published', 
-            'moderation_status',  # Modeldeki asıl alan
-            'moderation_status_display',  # SerializerMethodField ile oluşturulan alan
-            'view_count', 'likes_count', 'dislikes_count', 'play_count',
-            'created_at', 'updated_at'
+            'title', 'description', 'is_published', 'thumbnail',
+            'genre_ids', 'tag_ids'
         ]
-        read_only_fields = fields  # Bu serializer sadece okuma amaçlı
+    
+    def get_validation_type(self):
+        """Return validation type for BaseValidationMixin"""
+        return 'game'
+    
+    def validate_title(self, value):
+        """Validate game title with enhanced security"""
+        try:
+            return TextValidator.validate_game_title(value)
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def validate_description(self, value):
+        """Validate game description with enhanced security"""
+        try:
+            return TextValidator.validate_game_description(value)
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def validate_genre_ids(self, value):
+        """Validate genre IDs"""
+        if not value:
+            return value
+        
+        try:
+            validated_ids = DataValidator.validate_id_list(value, 'genre', max_count=5)
+            
+            # Check if all genre IDs exist
+            existing_genres = Genre.objects.filter(id__in=validated_ids)
+            if len(existing_genres) != len(validated_ids):
+                existing_ids = [g.id for g in existing_genres]
+                invalid_ids = [id for id in validated_ids if id not in existing_ids]
+                raise serializers.ValidationError(f"Invalid genre IDs: {invalid_ids}")
+            
+            return validated_ids
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def validate_tag_ids(self, value):
+        """Validate tag IDs"""
+        if not value:
+            return value
+        
+        try:
+            validated_ids = DataValidator.validate_id_list(value, 'tag', max_count=10)
+            
+            # Check if all tag IDs exist
+            existing_tags = Tag.objects.filter(id__in=validated_ids)
+            if len(existing_tags) != len(validated_ids):
+                existing_ids = [t.id for t in existing_tags]
+                invalid_ids = [id for id in validated_ids if id not in existing_ids]
+                raise serializers.ValidationError(f"Invalid tag IDs: {invalid_ids}")
+            
+            return validated_ids
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def validate(self, data):
+        """Enhanced update validation"""
+        try:
+            # Apply comprehensive input validation
+            data = super().validate(data)
+            
+            # Check for duplicate titles
+            title = data.get('title')
+            if title and self.instance:
+                user = self.instance.creator
+                existing_game = Game.objects.filter(
+                    creator=user,
+                    title=title
+                ).exclude(id=self.instance.id)
+                
+                if existing_game.exists():
+                    raise serializers.ValidationError({
+                        "title": "You already have a game with this title."
+                    })
+            
+            return data
+            
+        except InputSecurityError as e:
+            raise serializers.ValidationError(str(e))
+    
+    def update(self, instance, validated_data):
+        """Update game with M2M relationships"""
+        # Extract M2M data
+        genre_ids = validated_data.pop('genre_ids', None)
+        tag_ids = validated_data.pop('tag_ids', None)
+        
+        # Update basic fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update M2M relationships if provided
+        if genre_ids is not None:
+            instance.genres.set(genre_ids)
+        if tag_ids is not None:
+            instance.tags.set(tag_ids)
+        
+        logger.info(f"Game updated successfully: {instance.title} (ID: {instance.id})")
+        return instance
 
-    def get_thumbnail_url(self, obj):
-        request = self.context.get('request')
-        if obj.thumbnail and hasattr(obj.thumbnail, 'url') and obj.thumbnail.name:
-            thumbnail_actual_url = obj.thumbnail.url
-            if request is not None: return request.build_absolute_uri(thumbnail_actual_url)
-            return thumbnail_actual_url
-        else:
-            try: default_thumbnail_relative_path = static('images/default_game_thumbnail.png')
-            except Exception: return None
-            if request is not None: return request.build_absolute_uri(default_thumbnail_relative_path)
-            return default_thumbnail_relative_path
 
-    def get_moderation_status_display(self, obj):  # Bu metot zaten vardı
-        """Game modelindeki get_moderation_status_display() metodunu çağırır."""
-        return obj.get_moderation_status_display()
+class MyGameAnalyticsSerializer(serializers.ModelSerializer):
+    """
+    Kullanıcının kendi oyunları için basit analitik veriler
+    """
+    genres = GenreSerializer(many=True, read_only=True)
+    tags = TagSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Game
+        fields = [
+            'id', 'title', 'is_published', 'moderation_status',
+            'created_at', 'updated_at', 'likes_count', 'dislikes_count',
+            'play_count', 'view_count', 'genres', 'tags'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
     

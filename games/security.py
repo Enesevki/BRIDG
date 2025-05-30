@@ -45,15 +45,31 @@ DANGEROUS_EXTENSIONS = {
     # Note: .js files are allowed for WebGL games but will be content-scanned
 }
 
-# Suspicious file patterns (regex)
+# Unity WebGL whitelist patterns - these are safe Unity patterns
+UNITY_WEBGL_SAFE_PATTERNS = [
+    # Unity loader.js specific patterns that are safe
+    rb'unityFramework\s*=',
+    rb'Module\[.*\]\s*=.*unityLoader',
+    rb'UnityLoader\.instantiate',
+    rb'createUnityInstance',
+    rb'gameInstance\s*=.*createUnityInstance',
+    rb'HEAP8\s*=\s*new Int8Array',
+    rb'HEAPU8\s*=\s*new Uint8Array',
+    rb'Unity WebGL Player',
+    rb'buildUrl\s*\+\s*.*\.wasm',
+    rb'companyName\s*:\s*.*productName\s*:',
+    rb'unity-container',
+    rb'#unity-canvas',
+]
+
+# Suspicious file patterns (more specific now)
 DANGEROUS_PATTERNS = [
-    # Dangerous script injections (more specific)
-    rb'<script[^>]*src=["\']https?://[^"\']*evil[^"\']*',  # External evil scripts
-    rb'<script[^>]*>.*document\.write.*<script',          # Script injection via document.write
-    rb'javascript:.*[;,].*(?:eval|exec|system)',          # JavaScript with dangerous functions
+    # Clearly malicious patterns (not Unity-related)
+    rb'<script[^>]*src=["\']https?://(?!localhost|127\.0\.0\.1)[^"\']*(?:evil|malware|virus)[^"\']*',  # External malicious scripts
+    rb'javascript:.*[;,].*(?:system|shell|cmd|exec)\s*\(',  # JavaScript with system calls
     rb'vbscript:',
-    rb'onload\s*=.*(?:eval|exec|system)',                # Dangerous onload handlers
-    rb'onerror\s*=.*(?:eval|exec|system)',               # Dangerous onerror handlers
+    rb'onload\s*=.*(?:system|shell|cmd|exec)\s*\(',        # Dangerous onload handlers
+    rb'onerror\s*=.*(?:system|shell|cmd|exec)\s*\(',       # Dangerous onerror handlers
     
     # Server-side code
     rb'<\?php',
@@ -74,6 +90,9 @@ DANGEROUS_PATTERNS = [
     # Dangerous decoders
     rb'base64_decode\s*\(',
     rb'eval\s*\(\s*atob\s*\(',     # eval(atob()) - base64 decode + eval
+    
+    # External malicious URLs (not local/CDN)
+    rb'src\s*=\s*["\']https?://(?!(?:cdn\.|assets\.|static\.)[a-zA-Z0-9.-]+|localhost|127\.0\.0\.1)[^"\']*\.(?:exe|bat|scr|vbs)',
 ]
 
 # File size limits
@@ -81,6 +100,62 @@ MAX_FILE_SIZE = getattr(settings, 'MAX_GAME_ZIP_SIZE_MB', 50) * 1024 * 1024  # 5
 MAX_FILES_IN_ZIP = 1000  # Maximum files in ZIP
 MAX_FILENAME_LENGTH = 255
 MAX_TOTAL_EXTRACTED_SIZE = MAX_FILE_SIZE * 3  # 150MB max extracted
+
+# =============================================================================
+# WebGL Validation Classes
+# =============================================================================
+
+class WebGLStructureValidator:
+    """Validates Unity WebGL game structure"""
+    
+    def __init__(self, zip_file):
+        self.zip_file = zip_file
+        self.file_list = [f.filename for f in zip_file.infolist() if not f.is_dir()]
+        self.issues = []
+    
+    def validate(self):
+        """Validate WebGL game structure"""
+        self._check_required_files()
+        self._check_structure_patterns()
+        
+        if self.issues:
+            raise FileSecurityError(f"WebGL structure validation failed: {'; '.join(self.issues)}")
+    
+    def _check_required_files(self):
+        """Check for required WebGL files"""
+        # Check for index.html (can be in root or Build folder)
+        index_files = [f for f in self.file_list if f.lower().endswith('index.html')]
+        
+        if not index_files:
+            self.issues.append("Missing index.html - WebGL games require an HTML entry point")
+            return
+        
+        # Check for Unity build files
+        has_loader = any('loader.js' in f.lower() for f in self.file_list)
+        has_wasm = any(f.lower().endswith('.wasm') or f.lower().endswith('.wasm.br') for f in self.file_list)
+        has_data = any(f.lower().endswith('.data') or f.lower().endswith('.data.br') for f in self.file_list)
+        
+        if not has_loader:
+            self.issues.append("Missing Unity loader.js file")
+        
+        if not (has_wasm or has_data):
+            self.issues.append("Missing Unity runtime files (.wasm or .data files)")
+    
+    def _check_structure_patterns(self):
+        """Check for valid WebGL structure patterns"""
+        # Pattern 1: Files in root (Build/, TemplateData/, index.html)
+        # Pattern 2: Files in subfolder (SomeFolder/Build/, SomeFolder/TemplateData/, SomeFolder/index.html)
+        
+        build_folders = [f for f in self.file_list if '/build/' in f.lower() or f.lower().startswith('build/')]
+        template_folders = [f for f in self.file_list if '/templatedata/' in f.lower() or f.lower().startswith('templatedata/')]
+        
+        # At least one structure should exist
+        if not build_folders and not template_folders:
+            # Maybe it's a custom structure, check for Unity files
+            unity_files = [f for f in self.file_list if any(pattern in f.lower() for pattern in ['loader.js', '.wasm', '.data', 'unity'])]
+            if not unity_files:
+                self.issues.append("No Unity WebGL structure detected (missing Build/ or TemplateData/ folders)")
+
 
 # =============================================================================
 # File Validation Classes
@@ -153,12 +228,19 @@ class ZipSecurityAnalyzer:
         """Perform comprehensive ZIP security analysis"""
         try:
             with zipfile.ZipFile(self.zip_path, 'r') as zip_file:
+                # First validate WebGL structure
+                webgl_validator = WebGLStructureValidator(zip_file)
+                webgl_validator.validate()
+                
+                # Then check security
                 self._check_zip_structure(zip_file)
                 self._scan_file_contents(zip_file)
                 self._check_compression_bomb(zip_file)
                 
         except zipfile.BadZipFile:
             raise FileSecurityError("Corrupted or invalid ZIP file.")
+        except FileSecurityError:
+            raise  # Re-raise WebGL and security errors
         except Exception as e:
             logger.error(f"ZIP analysis error: {e}")
             raise FileSecurityError(f"Failed to analyze ZIP file: {str(e)}")
@@ -177,6 +259,10 @@ class ZipSecurityAnalyzer:
         for file_info in zip_file.infolist():
             filename = file_info.filename
             
+            # Skip __MACOSX folders (Mac metadata - harmless)
+            if '__MACOSX' in filename or filename.startswith('._'):
+                continue
+            
             # Check for path traversal
             if '../' in filename or '..\\' in filename:
                 self.threats_found.append(f"Path traversal attempt: {filename}")
@@ -194,14 +280,20 @@ class ZipSecurityAnalyzer:
             if file_ext in DANGEROUS_EXTENSIONS:
                 self.threats_found.append(f"Dangerous file type: {filename}")
             
-            # Check for hidden/system files
-            if filename.startswith('.') and file_ext not in {'.html', '.css', '.js', '.json', '.txt'}:
-                self.threats_found.append(f"Suspicious hidden file: {filename}")
+            # Check for suspicious hidden files (but allow common ones)
+            if filename.startswith('.') and file_ext not in {'.html', '.css', '.js', '.json', '.txt', '.gitignore', '.htaccess'}:
+                # Skip Mac metadata files
+                if not filename.startswith('._'):
+                    self.threats_found.append(f"Suspicious hidden file: {filename}")
     
     def _scan_file_contents(self, zip_file):
-        """Scan file contents for malicious patterns"""
+        """Scan file contents for malicious patterns (improved for Unity)"""
         for file_info in zip_file.infolist():
             if file_info.is_dir():
+                continue
+            
+            # Skip __MACOSX files
+            if '__MACOSX' in file_info.filename or file_info.filename.startswith('._'):
                 continue
             
             try:
@@ -217,16 +309,28 @@ class ZipSecurityAnalyzer:
                     # Only read first 64KB to avoid memory issues
                     content = f.read(65536)
                     
+                    # Special handling for Unity loader.js files
+                    if 'loader.js' in filename:
+                        # Check if it's a genuine Unity loader by looking for Unity patterns
+                        is_unity_loader = any(re.search(pattern, content, re.IGNORECASE) for pattern in UNITY_WEBGL_SAFE_PATTERNS)
+                        
+                        if is_unity_loader:
+                            # Skip dangerous pattern check for Unity loaders
+                            logger.debug(f"Unity loader.js detected and whitelisted: {file_info.filename}")
+                            continue
+                    
                     # Check for dangerous patterns
                     for pattern in DANGEROUS_PATTERNS:
                         if re.search(pattern, content, re.IGNORECASE):
                             self.threats_found.append(f"Suspicious content in {file_info.filename}")
                             break
                     
-                    # Check file entropy (possible encryption/obfuscation)
+                    # Check file entropy (possible encryption/obfuscation) - but be lenient for .js files
                     if len(content) > 1024:  # Only for files > 1KB
                         entropy = self._calculate_entropy(content)
-                        if entropy > 7.5:  # High entropy threshold
+                        # Higher threshold for .js files (Unity can be complex)
+                        threshold = 8.0 if filename.endswith('.js') else 7.5
+                        if entropy > threshold:
                             self.threats_found.append(f"High entropy file (possible encryption): {file_info.filename}")
             
             except Exception as e:
@@ -239,12 +343,20 @@ class ZipSecurityAnalyzer:
             if file_info.is_dir():
                 continue
             
+            # Skip __MACOSX files
+            if '__MACOSX' in file_info.filename:
+                continue
+            
             compressed_size = file_info.compress_size
             uncompressed_size = file_info.file_size
             
-            # Check individual file expansion ratio
-            if compressed_size > 0 and uncompressed_size / compressed_size > 100:
-                self.threats_found.append(f"Suspicious compression ratio in {file_info.filename}")
+            # Check individual file expansion ratio (more lenient for Unity files)
+            if compressed_size > 0:
+                ratio = uncompressed_size / compressed_size
+                # Unity .wasm and .data files can have high compression ratios
+                max_ratio = 1000 if any(ext in file_info.filename.lower() for ext in ['.wasm', '.data', '.br']) else 100
+                if ratio > max_ratio:
+                    self.threats_found.append(f"Suspicious compression ratio in {file_info.filename}")
             
             self.total_extracted_size += uncompressed_size
         

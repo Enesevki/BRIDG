@@ -7,23 +7,46 @@ from django.shortcuts import render
 from django.contrib.auth.models import User
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.permissions import AllowAny
 from .serializers import RegistrationSerializer, UserSerializer
+from gamehost_project.rate_limiting import rate_limit  # Simple rate limiting
 
+# İsteğe Bağlı: Logout View
+# Token tabanlı sistemde logout genellikle client'ta token'ı silmekle olur.
+# Ancak server tarafında token'ı geçersiz kılmak için bir endpoint oluşturulabilir.
+# from rest_framework.views import APIView
+# class LogoutAPIView(APIView):
+#     permission_classes = [permissions.IsAuthenticated]
+#
+#     def post(self, request, *args, **kwargs):
+#         try:
+#             # Kullanıcının token'ını bul ve sil
+#             request.user.auth_token.delete()
+#             return Response({"detail": "Başarıyla çıkış yapıldı."}, status=status.HTTP_200_OK)
+#         except (AttributeError, Token.DoesNotExist):
+#             return Response({"detail": "Token bulunamadı veya zaten çıkış yapılmış."}, status=status.HTTP_400_BAD_REQUEST)
 
 class JWTRegistrationAPIView(generics.CreateAPIView):
     """
-    JWT Authentication ile kullanıcı kaydı için API endpoint'i.
-    POST isteği ile username, email, password, password2 alır.
-    Başarılı kayıtta JWT token'ları (access + refresh) döner.
+    User registration endpoint that returns JWT tokens.
     """
     queryset = User.objects.all()
     serializer_class = RegistrationSerializer
-    permission_classes = [permissions.AllowAny]
-
+    permission_classes = [AllowAny]
+    
+    @rate_limit(requests_per_hour=10, key_type='ip')  # 10 registrations per hour per IP
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        tokens = {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }
         
         return Response({
             "user": {
@@ -31,7 +54,7 @@ class JWTRegistrationAPIView(generics.CreateAPIView):
                 "username": user.username,
                 "email": user.email,
             },
-            "tokens": user.jwt_tokens,
+            "tokens": tokens,
             "message": "Kullanıcı başarıyla oluşturuldu ve giriş yapıldı."
         }, status=status.HTTP_201_CREATED)
     
@@ -51,18 +74,3 @@ class UserDetailAPIView(generics.RetrieveAPIView):
         URL'den bir pk/id almasına gerek kalmaz.
         """
         return self.request.user
-
-# İsteğe Bağlı: Logout View
-# Token tabanlı sistemde logout genellikle client'ta token'ı silmekle olur.
-# Ancak server tarafında token'ı geçersiz kılmak için bir endpoint oluşturulabilir.
-# from rest_framework.views import APIView
-# class LogoutAPIView(APIView):
-#     permission_classes = [permissions.IsAuthenticated]
-#
-#     def post(self, request, *args, **kwargs):
-#         try:
-#             # Kullanıcının token'ını bul ve sil
-#             request.user.auth_token.delete()
-#             return Response({"detail": "Başarıyla çıkış yapıldı."}, status=status.HTTP_200_OK)
-#         except (AttributeError, Token.DoesNotExist):
-#             return Response({"detail": "Token bulunamadı veya zaten çıkış yapılmış."}, status=status.HTTP_400_BAD_REQUEST)

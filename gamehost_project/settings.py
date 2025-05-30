@@ -66,7 +66,6 @@ CACHES = {  # Bu produksiyon ortamında Redis veya Memcached gibi bir cache kull
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # CORS middleware should be as high as possible
     'gamehost_project.middleware.CORSSecurityMiddleware',  # Custom CORS security checks
-    'gamehost_project.rate_limiting.GlobalRateLimitMiddleware',  # Global rate limiting
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -76,6 +75,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'gamehost_project.middleware.SecurityHeadersMiddleware',  # Additional security headers
     'gamehost_project.middleware.APIVersionMiddleware',  # API versioning
+    'gamehost_project.rate_limiting.SimpleRateLimitMiddleware',  # Rate limiting after auth
 ]
 
 ROOT_URLCONF = 'gamehost_project.urls'
@@ -223,38 +223,26 @@ FILE_UPLOAD_USE_PYTHON_MAGIC = False  # Set to True if you install python-magic
 
 # Django REST Framework global settings
 REST_FRAMEWORK = {
-    # Varsayılan İzin Sınıfları (Default Permission Classes)
-    # Bu ayar, API endpoint'lerine erişim için varsayılan politikayı belirler.
+    # Default permissions
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
-
-    # Varsayılan Filtering Backends
+    
+    # Default filters
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
-
-    # Custom Exception Handler
+    
+    # Custom exception handler
     'EXCEPTION_HANDLER': 'games.utils.custom_exception_handler',
-
-    # Varsayılan Kimlik Doğrulama Sınıfları (Default Authentication Classes)
-    # Bu ayar, API isteklerinde kullanıcı kimliğinin nasıl doğrulanacağını belirler.
+    
+    # JWT Authentication
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # JWT Authentication - Modern and secure
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-
-        # Tarayıcıda görüntülenebilir API (Browsable API) üzerinden test yaparken
-        # veya session tabanlı kimlik doğrulama kullanmak isterseniz bunları da ekleyebilirsiniz.
-        # 'rest_framework.authentication.SessionAuthentication',
-        # 'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',  # For DRF browsable API
     ],
-
-    # Tarayıcıda Görüntülenebilir API için Sayfalama (Pagination)
-    # API'den çok sayıda kayıt döndüğünde performansı artırmak için sayfalama kullanılır.
-    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    # 'PAGE_SIZE': 10, # Her sayfada gösterilecek kayıt sayısı
 }
 
 # Logging Configuration
@@ -433,34 +421,10 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # =============================================================================
-# RATE LIMITING CONFIGURATION
+# CACHE CONFIGURATION FOR RATE LIMITING
 # =============================================================================
 
-# DRF Throttling Settings
-REST_FRAMEWORK.update({
-    'DEFAULT_THROTTLE_CLASSES': [
-        'gamehost_project.rate_limiting.AuthenticatedUserThrottle',
-        'gamehost_project.rate_limiting.AnonUserThrottle',
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        # General throttles
-        'user': '1000/hour',      # Authenticated users: 1000 requests/hour
-        'anon': '200/hour',       # Anonymous users: 200 requests/hour
-        
-        # Specific action throttles
-        'login': '10/hour',       # Login attempts: 10/hour per IP
-        'game_upload': '5/hour',  # Game uploads: 5/hour per user
-        'rating': '100/hour',     # Game ratings: 100/hour per user
-        'report': '20/hour',      # Game reports: 20/hour per user
-        'search': '100/hour',     # Search queries: 100/hour per IP
-        
-        # Administrative throttles
-        'admin': '2000/hour',     # Admin users: higher limits
-        'burst': '60/min',        # Short burst protection: 60/min
-    }
-})
-
-# Cache Configuration for Rate Limiting
+# Cache Configuration for Simple Rate Limiting System
 # Using database cache as fallback, but Redis is recommended for production
 CACHES = {
     'default': {
@@ -471,162 +435,19 @@ CACHES = {
             'CULL_FREQUENCY': 3,  # Remove 1/3 of entries when MAX_ENTRIES reached
         },
         'TIMEOUT': 3600,  # Default cache timeout: 1 hour
-    },
-    'rate_limit': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-        'LOCATION': 'rate_limit_cache',
-        'OPTIONS': {
-            'MAX_ENTRIES': 50000,  # Higher capacity for rate limiting
-            'CULL_FREQUENCY': 4,
-        },
-        'TIMEOUT': 7200,  # 2 hours for rate limit data
     }
 }
 
-# Rate Limiting Middleware Configuration
-RATE_LIMIT_MIDDLEWARE_ENABLED = True
-
-# Rate limiting bypass for certain IP addresses (use with caution)
-RATE_LIMIT_WHITELIST_IPS = [
-    '127.0.0.1',          # Localhost
-    '::1',                # IPv6 localhost
-    # Add your admin/monitoring IPs here
-]
-
-# Rate limiting configuration per endpoint type
-RATE_LIMIT_CONFIGS = {
-    'api_general': {
-        'rate': '500/h',
-        'key': 'ip',
-        'methods': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+# Simple Rate Limiting Configuration
+SIMPLE_RATE_LIMITING = {
+    'ENABLE_LOGGING': True,
+    'LOG_VIOLATIONS_ONLY': True,  # Only log when limits are exceeded
+    'GLOBAL_API_LIMITS': {
+        'authenticated_users': 1000,  # requests per hour
+        'anonymous_users': 100,       # requests per hour
     },
-    'auth_endpoints': {
-        'rate': '20/h',
-        'key': 'ip',
-        'methods': ['POST'],
-    },
-    'game_actions': {
-        'rate': '100/h',
-        'key': 'user_or_ip',
-        'methods': ['POST', 'PUT', 'PATCH', 'DELETE'],
-    },
-    'file_uploads': {
-        'rate': '10/h',
-        'key': 'user',
-        'methods': ['POST'],
-    }
-}
-
-# Rate limiting logging
-RATE_LIMIT_LOGGING = {
-    'log_violations': True,
-    'log_attempts': False,      # Set to True for debugging
-    'log_level': 'WARNING',
-    'include_user_agent': True,
-    'include_headers': False,   # Set to True for debugging
-}
-
-# =============================================================================
-# DJANGO-RATELIMIT CONFIGURATION
-# =============================================================================
-
-# Cache backend for django-ratelimit
-RATELIMIT_USE_CACHE = 'rate_limit'
-
-# Enable rate limiting globally
-RATELIMIT_ENABLE = True
-
-# Rate limit view configuration
-RATELIMIT_VIEW = 'gamehost_project.rate_limiting.ratelimit_handler'
-
-# Skip rate limiting for certain user agents (bots, health checks)
-RATELIMIT_SKIP_USER_AGENTS = [
-    'HealthChecker',
-    'UptimeRobot',
-    'Pingdom',
-    'StatusCake',
-]
-
-# Skip rate limiting for certain request paths
-RATELIMIT_SKIP_PATHS = [
-    '/health/',
-    '/status/',
-    '/admin/jsi18n/',  # Django admin JavaScript translations
-]
-
-# =============================================================================
-# JWT (JSON WEB TOKEN) CONFIGURATION
-# =============================================================================
-
-from datetime import timedelta
-
-SIMPLE_JWT = {
-    # Access token lifetime (short-lived for security)
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # 1 hour
-    
-    # Refresh token lifetime (longer-lived for convenience)
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # 7 days
-    
-    # Whether refresh tokens are rotated on each use
-    'ROTATE_REFRESH_TOKENS': True,
-    
-    # Blacklist refresh tokens after rotation
-    'BLACKLIST_AFTER_ROTATION': True,
-    
-    # Update last login on token refresh
-    'UPDATE_LAST_LOGIN': True,
-    
-    # Algorithm for signing tokens
-    'ALGORITHM': 'HS256',
-    
-    # Signing key (uses Django SECRET_KEY by default)
-    'SIGNING_KEY': SECRET_KEY,
-    
-    # Verification key (same as signing key for symmetric algorithms)
-    'VERIFYING_KEY': None,
-    
-    # Audience claim
-    'AUDIENCE': None,
-    
-    # Issuer claim
-    'ISSUER': 'gamehost-platform',
-    
-    # JWK URL for asymmetric algorithms
-    'JWK_URL': None,
-    
-    # Leeway for token validation
-    'LEEWAY': timedelta(seconds=10),
-    
-    # Auth header types
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
-    
-    # User ID field
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
-    
-    # User authentication rule
-    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
-    
-    # Auth token classes
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
-    
-    # Token types
-    'TOKEN_TYPE_CLAIM': 'token_type',
-    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
-    
-    # JTI claim
-    'JTI_CLAIM': 'jti',
-    
-    # Sliding token settings
-    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
-    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
-    
-    # Token obtain pair serializer
-    'TOKEN_OBTAIN_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenObtainPairSerializer',
-    'TOKEN_REFRESH_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenRefreshSerializer',
-    'TOKEN_VERIFY_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenVerifySerializer',
-    'TOKEN_BLACKLIST_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenBlacklistSerializer',
-    'SLIDING_TOKEN_OBTAIN_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenObtainSlidingSerializer',
-    'SLIDING_TOKEN_REFRESH_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenRefreshSlidingSerializer',
+    'EXEMPT_IPS': [
+        '127.0.0.1',  # Localhost
+        '::1',        # IPv6 localhost
+    ]
 }

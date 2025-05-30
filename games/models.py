@@ -172,3 +172,15 @@ class Game(models.Model):
 
     def __str__(self):
         return f"{self.title} (by {self.creator.username})"
+
+    def get_thumbnail_url(self):
+        """Get thumbnail URL or default thumbnail URL"""
+        if self.thumbnail and hasattr(self.thumbnail, 'url'):
+            try:
+                return self.thumbnail.url
+            except ValueError:
+                # Handle case where file doesn't exist on disk
+                pass
+        # Return default thumbnail from static files
+        from django.templatetags.static import static
+        return static('images/bridg-default-game-thumbnail.png')

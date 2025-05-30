@@ -74,8 +74,9 @@ class GameAdmin(admin.ModelAdmin):
 
     def thumbnail_display(self, obj):
         from django.utils.html import format_html
-        if obj.thumbnail and obj.thumbnail.url: # .url varlığını da kontrol et
-            return format_html('<img src="{}" style="max-width: 200px; max-height: 200px;" />', obj.thumbnail.url)
+        thumbnail_url = obj.get_thumbnail_url()
+        if thumbnail_url:
+            return format_html('<img src="{}" style="max-width: 200px; max-height: 200px;" />', thumbnail_url)
         return "Thumbnail Yok"
     thumbnail_display.short_description = "Mevcut Thumbnail"
     # thumbnail_display.allow_tags = True # Yeni Django versiyonlarında genellikle gereksiz
