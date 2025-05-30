@@ -245,6 +245,53 @@ REST_FRAMEWORK = {
     ],
 }
 
+# =============================================================================
+# JWT AUTHENTICATION CONFIGURATION
+# =============================================================================
+
+from datetime import timedelta
+
+# Simple JWT Configuration
+SIMPLE_JWT = {
+    # Token lifetimes
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),     # 1 hour
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),        # 7 days
+    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=60),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=7),
+
+    # Security features
+    'ROTATE_REFRESH_TOKENS': True,                      # Generate new refresh token on refresh
+    'BLACKLIST_AFTER_ROTATION': True,                  # Blacklist old refresh tokens
+    'UPDATE_LAST_LOGIN': True,                          # Update last_login field on login
+    
+    # Token signing
+    'ALGORITHM': 'HS256',                               # Signing algorithm
+    'SIGNING_KEY': SECRET_KEY,                          # Use Django secret key
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'JSON_ENCODER': None,
+    'JWK_URL': None,
+    'LEEWAY': 0,
+
+    # Auth header configuration
+    'AUTH_HEADER_TYPES': ('Bearer',),                  # Authorization: Bearer <token>
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+
+    # Token classes
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+
+    # Sliding tokens (alternative to refresh tokens)
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME_CLAIM': 'exp',
+    'SLIDING_TOKEN_REFRESH_LIFETIME_CLAIM': 'refresh_exp',
+}
+
 # Logging Configuration
 LOGGING = {
     'version': 1,
