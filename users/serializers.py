@@ -4,25 +4,34 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password  # Şifre politikalarını kontrol etmek için
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 class RegistrationSerializer(serializers.ModelSerializer):
+    """
+    JWT token'ları ile birlikte kullanıcı kaydı için serializer.
+    Kayıt sonrası otomatik olarak JWT token'ları döner.
+    """
     email = serializers.EmailField(
         required=True,
         validators=[UniqueValidator(queryset=User.objects.all(), message="Bu e-posta adresi zaten kullanılıyor.")]
     )
-    password2 = serializers.CharField(style={'input_type': 'password'}, write_only=True, label="Şifre (Tekrar)")
+    password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    password2 = serializers.CharField(write_only=True, style={'input_type': 'password'})
 
     class Meta:
         model = User
         fields = ('username', 'email', 'password', 'password2')
-        extra_kwargs = {
-            'password': {'write_only': True, 'style': {'input_type': 'password'}, 'label': "Şifre"}
-        }
 
     def validate(self, attrs):
-        if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError({"password": "Şifreler eşleşmiyor."})
+        """
+        Şifre doğrulaması ve diğer validasyonlar.
+        """
+        password = attrs.get('password')
+        password2 = attrs.get('password2')
+
+        if password != password2:
+            raise serializers.ValidationError("Şifreler eşleşmiyor.")
 
         # Django'nun yerleşik şifre validasyonlarını çağıralım.
         # User instance'ını oluştururken 'password2'yi dışarıda bırakıyoruz.
@@ -44,19 +53,38 @@ class RegistrationSerializer(serializers.ModelSerializer):
             else:
                  raise serializers.ValidationError({'password': str(e)})
 
-
         return attrs
 
     def create(self, validated_data):
+        """
+        Kullanıcı oluştur ve JWT token'ları üret.
+        """
+        # password2'yi validated_data'dan çıkar çünkü User modeli bu alanı tanımıyor
+        validated_data.pop('password2', None)
+
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password']
         )
+        
+        # JWT token'ları oluştur
+        refresh = RefreshToken.for_user(user)
+        
+        # User instance'ına token'ları ekle (serializer'da kullanmak için)
+        user.jwt_tokens = {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }
+        
         return user
-    
+
 
 class UserSerializer(serializers.ModelSerializer):
+    """
+    Kullanıcı detayları için serializer.
+    """
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'first_name', 'last_name')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'date_joined')
+        read_only_fields = ('id', 'date_joined')

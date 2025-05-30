@@ -25,6 +25,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
+from users.views import JWTRegistrationAPIView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -33,15 +34,16 @@ urlpatterns = [
     # JWT AUTHENTICATION ENDPOINTS
     # =============================================================================
     # Modern JWT Authentication (access + refresh tokens)
+    path('api/auth/register/', JWTRegistrationAPIView.as_view(), name='jwt_register'),
     path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
     
     # =============================================================================
-    # LEGACY AUTHENTICATION (Token-based) - For backward compatibility
+    # USER PROFILE ENDPOINTS  
     # =============================================================================
-    # users uygulamasının URL'lerini /api/auth-legacy/ ön eki altında dahil et
-    path('api/auth-legacy/', include('users.urls', namespace='auth_legacy_api')), 
+    # User profile endpoint (for backward compatibility with test scripts)
+    path('api/auth-legacy/', include('users.urls', namespace='auth_legacy_api')),
     
     # =============================================================================
     # API ENDPOINTS

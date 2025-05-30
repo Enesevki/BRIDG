@@ -45,7 +45,6 @@ INSTALLED_APPS = [
 
     # Third-party apps (We'll add DRF, etc. here later)
     'rest_framework',  # Django REST Framework for API development
-    'rest_framework.authtoken',  # Token authentication for DRF (will be replaced by JWT)
     'rest_framework_simplejwt',  # JWT authentication for DRF
     'django_filters',  # Django Filter for API filtering
     'corsheaders',  # Django CORS Headers for cross-origin requests
@@ -242,30 +241,20 @@ REST_FRAMEWORK = {
 
     # Varsayılan Kimlik Doğrulama Sınıfları (Default Authentication Classes)
     # Bu ayar, API isteklerinde kullanıcı kimliğinin nasıl doğrulanacağını belirler.
-    # Şimdilik boş bırakabiliriz veya SessionAuthentication ve BasicAuthentication'ı
-    # tarayıcıda görüntülenebilir API için ekleyebiliriz. TokenAuthentication'ı sonra ekleyeceğiz.
-    # 'DEFAULT_AUTHENTICATION_CLASSES': [
-    #     'rest_framework.authentication.SessionAuthentication', # Tarayıcıda görüntülenebilir API için
-    #     'rest_framework.authentication.BasicAuthentication',   # Basit HTTP Basic Auth için
-    # ],
-
-    # Tarayıcıda Görüntülenebilir API için Sayfalama (Pagination)
-    # API'den çok sayıda kayıt döndüğünde performansı artırmak için sayfalama kullanılır.
-    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    # 'PAGE_SIZE': 10, # Her sayfada gösterilecek kayıt sayısı
-
     'DEFAULT_AUTHENTICATION_CLASSES': [
         # JWT Authentication - Modern and secure
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        
-        # Keep Token Authentication for backward compatibility (optional)
-        # 'rest_framework.authentication.TokenAuthentication',
 
         # Tarayıcıda görüntülenebilir API (Browsable API) üzerinden test yaparken
         # veya session tabanlı kimlik doğrulama kullanmak isterseniz bunları da ekleyebilirsiniz.
         # 'rest_framework.authentication.SessionAuthentication',
         # 'rest_framework.authentication.BasicAuthentication',
-    ]
+    ],
+
+    # Tarayıcıda Görüntülenebilir API için Sayfalama (Pagination)
+    # API'den çok sayıda kayıt döndüğünde performansı artırmak için sayfalama kullanılır.
+    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    # 'PAGE_SIZE': 10, # Her sayfada gösterilecek kayıt sayısı
 }
 
 # Logging Configuration

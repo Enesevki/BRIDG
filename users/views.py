@@ -7,65 +7,39 @@ from django.shortcuts import render
 from django.contrib.auth.models import User
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from rest_framework.authtoken.views import ObtainAuthToken # Token almak için hazır view
-from rest_framework.authtoken.models import Token # Token modelini import ediyoruz
 from .serializers import RegistrationSerializer, UserSerializer
 
 
-class RegistrationAPIView(generics.CreateAPIView):
+class JWTRegistrationAPIView(generics.CreateAPIView):
     """
-    Yeni kullanıcı kaydı için API endpoint'i.
+    JWT Authentication ile kullanıcı kaydı için API endpoint'i.
     POST isteği ile username, email, password, password2 alır.
-    Başarılı kayıtta kullanıcı bilgilerini (hassas olmayan) döner.
+    Başarılı kayıtta JWT token'ları (access + refresh) döner.
     """
     queryset = User.objects.all()
     serializer_class = RegistrationSerializer
-    permission_classes = [permissions.AllowAny] # Herkes kayıt olabilir
+    permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        # Kayıt sonrası kullanıcıya token döndürmek isteğe bağlıdır.
-        # Genellikle kullanıcı kayıt olduktan sonra ayrıca giriş yapar ve token alır.
-        # Ancak isterseniz burada token oluşturup döndürebilirsiniz:
-        # token, created = Token.objects.get_or_create(user=user)
-        # return Response({
-        #     "user": UserSerializer(user, context=self.get_serializer_context()).data,
-        #     "token": token.key
-        # }, status=status.HTTP_201_CREATED)
-
-        # Şimdilik sadece kullanıcı bilgilerini (hassas olmayan) ve başarı mesajı dönelim.
+        
         return Response({
-            "user": UserSerializer(user, context=self.get_serializer_context()).data,
-            "message": "Kullanıcı başarıyla oluşturuldu. Lütfen giriş yapın."
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+            },
+            "tokens": user.jwt_tokens,
+            "message": "Kullanıcı başarıyla oluşturuldu ve giriş yapıldı."
         }, status=status.HTTP_201_CREATED)
-
-
-class LoginAPIView(ObtainAuthToken):
-    """
-    Kullanıcı girişi için API endpoint'i.
-    POST isteği ile username ve password alır.
-    Başarılı girişte kullanıcı token'ını ve kullanıcı bilgilerini döner.
-    """
-    def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data,
-                                           context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user']
-        token, created = Token.objects.get_or_create(user=user)
-        return Response({
-            'token': token.key,
-            'user_id': user.pk,
-            'username': user.username,
-            'email': user.email
-        })
     
 
 class UserDetailAPIView(generics.RetrieveAPIView):
     """
     Giriş yapmış kullanıcının kendi detaylarını getirmek için API endpoint'i.
-    GET isteği ile token gerektirir.
+    GET isteği ile JWT token gerektirir.
     """
     queryset = User.objects.all()
     serializer_class = UserSerializer
