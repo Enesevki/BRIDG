@@ -45,7 +45,8 @@ INSTALLED_APPS = [
 
     # Third-party apps (We'll add DRF, etc. here later)
     'rest_framework',  # Django REST Framework for API development
-    'rest_framework.authtoken',  # Token authentication for DRF
+    'rest_framework.authtoken',  # Token authentication for DRF (will be replaced by JWT)
+    'rest_framework_simplejwt',  # JWT authentication for DRF
     'django_filters',  # Django Filter for API filtering
     'corsheaders',  # Django CORS Headers for cross-origin requests
     
@@ -254,14 +255,14 @@ REST_FRAMEWORK = {
     # 'PAGE_SIZE': 10, # Her sayfada gösterilecek kayıt sayısı
 
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # API isteklerinde kullanıcı kimliğini doğrulamak için kullanılacak yöntemler.
-        # TokenAuthentication, 'Authorization: Token <token_value>' başlığını arar.
-        'rest_framework.authentication.TokenAuthentication',
+        # JWT Authentication - Modern and secure
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        
+        # Keep Token Authentication for backward compatibility (optional)
+        # 'rest_framework.authentication.TokenAuthentication',
 
         # Tarayıcıda görüntülenebilir API (Browsable API) üzerinden test yaparken
         # veya session tabanlı kimlik doğrulama kullanmak isterseniz bunları da ekleyebilirsiniz.
-        # Ancak SPA (Single Page Application) ile token tabanlı çalışırken
-        # TokenAuthentication genellikle ana yöntemdir.
         # 'rest_framework.authentication.SessionAuthentication',
         # 'rest_framework.authentication.BasicAuthentication',
     ]
@@ -563,3 +564,80 @@ RATELIMIT_SKIP_PATHS = [
     '/status/',
     '/admin/jsi18n/',  # Django admin JavaScript translations
 ]
+
+# =============================================================================
+# JWT (JSON WEB TOKEN) CONFIGURATION
+# =============================================================================
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    # Access token lifetime (short-lived for security)
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # 1 hour
+    
+    # Refresh token lifetime (longer-lived for convenience)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # 7 days
+    
+    # Whether refresh tokens are rotated on each use
+    'ROTATE_REFRESH_TOKENS': True,
+    
+    # Blacklist refresh tokens after rotation
+    'BLACKLIST_AFTER_ROTATION': True,
+    
+    # Update last login on token refresh
+    'UPDATE_LAST_LOGIN': True,
+    
+    # Algorithm for signing tokens
+    'ALGORITHM': 'HS256',
+    
+    # Signing key (uses Django SECRET_KEY by default)
+    'SIGNING_KEY': SECRET_KEY,
+    
+    # Verification key (same as signing key for symmetric algorithms)
+    'VERIFYING_KEY': None,
+    
+    # Audience claim
+    'AUDIENCE': None,
+    
+    # Issuer claim
+    'ISSUER': 'gamehost-platform',
+    
+    # JWK URL for asymmetric algorithms
+    'JWK_URL': None,
+    
+    # Leeway for token validation
+    'LEEWAY': timedelta(seconds=10),
+    
+    # Auth header types
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    
+    # User ID field
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    
+    # User authentication rule
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+    
+    # Auth token classes
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    
+    # Token types
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+    
+    # JTI claim
+    'JTI_CLAIM': 'jti',
+    
+    # Sliding token settings
+    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
+    
+    # Token obtain pair serializer
+    'TOKEN_OBTAIN_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenObtainPairSerializer',
+    'TOKEN_REFRESH_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenRefreshSerializer',
+    'TOKEN_VERIFY_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenVerifySerializer',
+    'TOKEN_BLACKLIST_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenBlacklistSerializer',
+    'SLIDING_TOKEN_OBTAIN_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenObtainSlidingSerializer',
+    'SLIDING_TOKEN_REFRESH_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenRefreshSlidingSerializer',
+}

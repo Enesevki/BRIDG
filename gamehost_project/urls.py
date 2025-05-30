@@ -19,12 +19,35 @@ from django.urls import path, include
 from django.conf import settings  # settings'i import et
 from django.conf.urls.static import static  # static'i import et
 
+# JWT Views
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView,
+)
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # =============================================================================
+    # JWT AUTHENTICATION ENDPOINTS
+    # =============================================================================
+    # Modern JWT Authentication (access + refresh tokens)
+    path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    
+    # =============================================================================
+    # LEGACY AUTHENTICATION (Token-based) - For backward compatibility
+    # =============================================================================
+    # users uygulamasının URL'lerini /api/auth-legacy/ ön eki altında dahil et
+    path('api/auth-legacy/', include('users.urls', namespace='auth_legacy_api')), 
+    
+    # =============================================================================
+    # API ENDPOINTS
+    # =============================================================================
     # games uygulamasının URL'lerini /api/games/ ön eki altında dahil et
     path('api/games/', include('games.urls')),
-    # users uygulamasının URL'lerini /api/auth/ ön eki altında dahil et
-    path('api/auth/', include('users.urls', namespace='auth_api')), # namespace eklemek iyi bir pratik
     # path('api/interactions/', include('interactions.urls')),
 
     # DRF'in login/logout view'larını tarayıcıda görüntülenebilir API için ekleyebiliriz
