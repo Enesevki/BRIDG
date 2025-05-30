@@ -181,6 +181,46 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Oyun yüklemeleri için maksimum dosya boyutu (Megabyte cinsinden)
 MAX_GAME_ZIP_SIZE_MB = 50  # Örneğin 50 MB
 
+# =============================================================================
+# FILE UPLOAD SECURITY CONFIGURATION
+# =============================================================================
+
+# File Security Settings for Game Uploads
+FILE_UPLOAD_SECURITY = {
+    # Size limits
+    'MAX_FILE_SIZE_MB': MAX_GAME_ZIP_SIZE_MB,
+    'MAX_FILES_IN_ZIP': 1000,
+    'MAX_FILENAME_LENGTH': 255,
+    'MAX_TOTAL_EXTRACTED_SIZE_MB': MAX_GAME_ZIP_SIZE_MB * 3,  # 150MB default
+    
+    # File type restrictions
+    'ALLOWED_EXTENSIONS': ['.zip'],
+    'ALLOWED_MIME_TYPES': [
+        'application/zip',
+        'application/x-zip-compressed', 
+        'application/x-zip',
+    ],
+    
+    # Security features
+    'ENABLE_MAGIC_BYTE_CHECK': True,
+    'ENABLE_CONTENT_SCANNING': True,
+    'ENABLE_ENTROPY_ANALYSIS': True,
+    'ENABLE_PATH_TRAVERSAL_CHECK': True,
+    'ENABLE_COMPRESSION_BOMB_CHECK': True,
+    
+    # Thresholds
+    'HIGH_ENTROPY_THRESHOLD': 7.5,
+    'MAX_COMPRESSION_RATIO': 100,
+    
+    # Dangerous patterns (for content scanning)
+    'SCAN_TEXT_FILES_ONLY': True,  # Only scan .html, .css, .js, etc.
+    'MAX_SCAN_SIZE_KB': 64,        # Only scan first 64KB of files
+}
+
+# Optional: Python-magic dependency for enhanced file type detection
+# If python-magic is not installed, fallback to magic byte checking
+FILE_UPLOAD_USE_PYTHON_MAGIC = False  # Set to True if you install python-magic
+
 # Django REST Framework global settings
 REST_FRAMEWORK = {
     # Varsayılan İzin Sınıfları (Default Permission Classes)

@@ -11,6 +11,9 @@ from django.core.files.storage import default_storage
 import zipfile
 import os
 
+# File Security Import - Light & Powerful
+from .security import validate_game_upload, FileSecurityError
+
 
 # --- Yardımcı Fonksiyon (Sınıf Dışında, Dosyanın Başında) ---
 def find_zip_root_folder(file_list_from_zip):
@@ -267,8 +270,20 @@ class GameSerializer(serializers.ModelSerializer):
         return obj.get_moderation_status_display()
 
     def validate_webgl_build_zip(self, value):  # value burada InMemoryUploadedFile objesi
-        if value is None: return value
+        if value is None: 
+            return value
         
+        # 🔒 COMPREHENSIVE FILE SECURITY VALIDATION
+        try:
+            # Step 1: Run complete security validation
+            validate_game_upload(value)
+            
+        except FileSecurityError as e:
+            # Convert to DRF ValidationError with detailed message
+            raise serializers.ValidationError(f"Security validation failed: {str(e)}")
+        
+        # 🎮 WEBGL GAME STRUCTURE VALIDATION
+        # After security checks, validate WebGL game structure
         max_size_bytes = settings.MAX_GAME_ZIP_SIZE_MB * 1024 * 1024
         if value.size > max_size_bytes:
             raise serializers.ValidationError(
@@ -299,7 +314,7 @@ class GameSerializer(serializers.ModelSerializer):
                 if not any(f.startswith(expected_template_data_dir) for f in file_list):
                     raise serializers.ValidationError(f"Zip dosyası '{expected_template_data_dir}' klasörünü (veya içeriğini) içermelidir.")
 
-                # Path traversal kontrolü
+                # Path traversal kontrolü (additional security layer)
                 for member_name in file_list:
                     path_to_check = member_name
                     if potential_root_folder_in_zip and member_name.startswith(potential_root_folder_in_zip):
