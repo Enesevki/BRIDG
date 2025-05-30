@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'rest_framework',  # Django REST Framework for API development
     'rest_framework.authtoken',  # Token authentication for DRF
     'django_filters',  # Django Filter for API filtering
+    'corsheaders',  # Django CORS Headers for cross-origin requests
     
 
     # Our local apps (Using AppConfig paths)
@@ -63,6 +64,8 @@ CACHES = {  # Bu produksiyon ortamında Redis veya Memcached gibi bir cache kull
 }
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # CORS middleware should be as high as possible
+    'gamehost_project.middleware.CORSSecurityMiddleware',  # Custom CORS security checks
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -70,6 +73,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'gamehost_project.middleware.SecurityHeadersMiddleware',  # Additional security headers
+    'gamehost_project.middleware.APIVersionMiddleware',  # API versioning
 ]
 
 ROOT_URLCONF = 'gamehost_project.urls'
@@ -289,3 +294,109 @@ LOGGING = {
         },
     },
 }
+
+# =============================================================================
+# CORS (Cross-Origin Resource Sharing) Configuration
+# =============================================================================
+
+# CORS allows web applications running at one origin (domain, protocol, or port)
+# to access resources from another origin. This is essential for frontend-backend
+# communication when they're served from different domains/ports.
+
+# Development vs Production CORS Settings
+DEBUG_CORS = True  # Set to False in production
+
+if DEBUG_CORS:
+    # 🔓 DEVELOPMENT SETTINGS (Relaxed for local development)
+    
+    # Allow all origins during development (NOT for production!)
+    CORS_ALLOW_ALL_ORIGINS = True
+    
+    # Allow credentials (cookies, authorization headers, etc.)
+    CORS_ALLOW_CREDENTIALS = True
+    
+    # Allowed origins for development
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:3000",     # React development server
+        "http://127.0.0.1:3000",     # Alternative React dev server
+        "http://localhost:3001",     # Alternative frontend port
+        "http://localhost:8080",     # Vue.js development server
+        "http://127.0.0.1:8080",     # Alternative Vue dev server
+        "http://localhost:5173",     # Vite development server
+        "http://127.0.0.1:5173",     # Alternative Vite dev server
+    ]
+    
+else:
+    # 🔒 PRODUCTION SETTINGS (Strict for security)
+    
+    # Only allow specific origins in production
+    CORS_ALLOW_ALL_ORIGINS = False
+    
+    # Production origins (update these with your actual domains)
+    CORS_ALLOWED_ORIGINS = [
+        "https://yourdomain.com",
+        "https://www.yourdomain.com",
+        "https://app.yourdomain.com",
+    ]
+
+# Allowed headers for CORS requests
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    # Custom headers for your API
+    'x-api-key',
+    'x-client-version',
+]
+
+# Allowed HTTP methods for CORS requests
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Preflight cache duration (in seconds)
+# How long browsers cache CORS preflight responses
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+
+# Security headers for CORS
+CORS_EXPOSE_HEADERS = [
+    'Content-Type',
+    'X-Total-Count',      # For pagination
+    'X-Rate-Limit-Remaining',  # For rate limiting info
+    'X-Rate-Limit-Reset',      # For rate limiting info
+]
+
+# =============================================================================
+# Additional Security Settings for CORS
+# =============================================================================
+
+# Only allow HTTPS in production (set to True in production)
+SECURE_SSL_REDIRECT = False  # Set to True in production with HTTPS
+
+# Prevent clickjacking attacks
+X_FRAME_OPTIONS = 'DENY'
+
+# Prevent MIME type sniffing
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# XSS Protection
+SECURE_BROWSER_XSS_FILTER = True
+
+# CSRF Settings for API
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    # Add your production domains here:
+    # "https://yourdomain.com",
+]
