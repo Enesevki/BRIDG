@@ -2,8 +2,8 @@
 
 **Proje**: Game Hosting Platform Backend  
 **Teknoloji**: Django REST Framework + PostgreSQL  
-**Sürüm**: 2.2.0 (Production Ready)  
-**Tarih**: 30 Aralık 2024  
+**Sürüm**: 2.7.0 (Production Ready with Enhanced User Registration)  
+**Tarih**: 31 Aralık 2024  
 
 ---
 
@@ -27,8 +27,11 @@ Game Hosting Platform, modern web teknolojileri kullanılarak geliştirilmiş, e
 
 ### 🌟 Ana Özellikler
 - **WebGL Oyun Hosting**: Unity oyunları için optimize edilmiş hosting
-- **JWT Authentication**: Güvenli token tabanlı kimlik doğrulama
+- **Enhanced User Registration**: First name & last name ile kapsamlı kullanıcı profilleri
+- **JWT Authentication**: Güvenli token tabanlı kimlik doğrulama + logout + password change
+- **BRIDG Email Verification**: Gmail SMTP entegrasyonu ile profesyonel email doğrulama
 - **Multi-Layer Security**: Dosya güvenliği, input validation, rate limiting
+- **Enhanced Admin Panel**: Email verification status ile gelişmiş kullanıcı yönetimi
 - **Real-time Analytics**: Oyun istatistikleri ve kullanıcı etkileşimleri
 - **Content Moderation**: Admin onay sistemi ile içerik moderasyonu
 - **High Performance**: Database indexing ve pagination optimizasyonları
@@ -37,11 +40,12 @@ Game Hosting Platform, modern web teknolojileri kullanılarak geliştirilmiş, e
 ```
 Frontend Layer    : React/Vue.js (Ayrı repository)
 Backend API       : Django REST Framework 5.2
-Authentication    : JWT (djangorestframework-simplejwt)
+Authentication    : JWT (djangorestframework-simplejwt) with token blacklisting
+Email Service     : Gmail SMTP integration with BRIDG branding
 Database          : PostgreSQL (Production) / SQLite (Development)
 Cache             : Database Cache / Redis (Production)
 File Storage      : Django File Storage + Media handling
-Security          : Custom middleware + validation systems
+Security          : Custom middleware + validation systems + .env protection
 Deployment        : Gunicorn + Nginx + Linux
 ```
 
@@ -820,24 +824,38 @@ sequenceDiagram
     participant DB as Database
     participant JWT as JWT Service
     
-    Note over FE,JWT: User Registration & Authentication Flow
+    Note over FE,JWT: Enhanced User Registration & Email Verification Flow
     
-    FE->>+API: POST /api/auth/register/
+    FE->>+API: POST /api/auth/register/ (username, email, password, first_name, last_name)
     API->>+MW: Process Request
     MW->>MW: Rate Limiting (10/hour per IP)
-    MW->>MW: Input Validation
+    MW->>MW: Input Validation (XSS, SQL injection protection)
     MW->>+DB: Check Username/Email Uniqueness
     DB-->>-MW: Unique Check Result
     
     alt User Data Valid & Unique
-        MW->>+DB: Create User Record
+        MW->>+DB: Create User Record (with first_name, last_name)
         DB-->>-MW: User Created
+        MW->>+DB: Create UserProfile Record
+        DB-->>-MW: UserProfile Created
         MW->>+JWT: Generate Token Pair
         JWT-->>-MW: Access & Refresh Tokens
-        MW-->>-API: User + Tokens
-        API-->>-FE: 201 Created + JWT Tokens
+        MW->>MW: Send BRIDG Email Verification (6-digit code)
+        MW-->>-API: User + Tokens + Email Status
+        API-->>-FE: 201 Created + JWT Tokens + User Data (with first_name, last_name)
         
-        Note over FE: Store tokens in localStorage/cookie
+        Note over FE: Store tokens, display email verification prompt
+        
+        FE->>+API: POST /api/auth/verify-email/ (verification_code)
+        API->>+MW: Validate Code
+        MW->>+DB: Check Code & Expiry
+        DB-->>-MW: Code Valid
+        MW->>+DB: Update email_verified = True
+        DB-->>-MW: Email Verified
+        MW-->>-API: Verification Success
+        API-->>-FE: 200 OK + Welcome Message
+        
+        Note over FE: User can now access all features
         
         FE->>+API: GET /api/games/games/ (with Bearer token)
         API->>+MW: Validate JWT Token
@@ -849,18 +867,48 @@ sequenceDiagram
         API-->>-FE: 200 OK + Games Data
         
     else Validation Fails
-        MW-->>-API: Validation Error
+        MW-->>-API: Validation Error (detailed field errors)
         API-->>-FE: 400 Bad Request + Error Details
     end
     
-    Note over FE,JWT: Token Refresh Process
+    Note over FE,JWT: JWT Token Refresh Process
     
-    FE->>+API: POST /api/auth/token/refresh/
+    FE->>+API: POST /api/auth/token/refresh/ (refresh_token)
     API->>+JWT: Validate Refresh Token
-    JWT->>JWT: Check Token Rotation
+    JWT->>JWT: Check Token Rotation & Blacklist
     JWT->>JWT: Generate New Access Token
     JWT-->>-API: New Access Token
     API-->>-FE: 200 OK + New Access Token
+    
+    Note over FE,JWT: JWT Logout Process (Token Blacklisting)
+    
+    FE->>+API: POST /api/auth/logout/ (refresh_token)
+    API->>+MW: Validate Access Token
+    MW->>+JWT: Verify Access Token
+    JWT-->>-MW: Token Valid
+    MW->>+JWT: Blacklist Refresh Token
+    JWT-->>-MW: Token Blacklisted
+    MW-->>-API: Logout Success
+    API-->>-FE: 200 OK + Logout Message
+    
+    Note over FE: Clear stored tokens, redirect to login
+    
+    Note over FE,JWT: Password Change Process
+    
+    FE->>+API: POST /api/auth/change-password/ (old_password, new_password)
+    API->>+MW: Validate Access Token
+    MW->>+JWT: Verify Token
+    JWT-->>-MW: Token Valid
+    MW->>+DB: Verify Old Password
+    DB-->>-MW: Password Valid
+    MW->>+DB: Update Password (hashed)
+    DB-->>-MW: Password Updated
+    MW->>+JWT: Generate New Token Pair (security)
+    JWT-->>-MW: New Tokens
+    MW-->>-API: Password Changed + New Tokens
+    API-->>-FE: 200 OK + New Tokens + Success Message
+    
+    Note over FE: Update stored tokens, show success message
 ```
 
 ---
@@ -1004,6 +1052,8 @@ classDiagram
         +id: integer
         +username: string
         +email: string
+        +first_name: string
+        +last_name: string
         +date_joined: datetime
     }
     
@@ -1036,6 +1086,7 @@ erDiagram
     AUTH_USER ||--o{ GAME : creates
     AUTH_USER ||--o{ RATING : makes
     AUTH_USER ||--o{ REPORT : submits
+    AUTH_USER ||--|| USER_PROFILE : has
     GAME ||--o{ RATING : receives
     GAME ||--o{ REPORT : receives
     GAME }o--o{ GENRE : belongs_to
@@ -1045,11 +1096,25 @@ erDiagram
         int id PK
         string username UK
         string email UK
+        string first_name
+        string last_name
         string password
         datetime date_joined
         boolean is_active
         boolean is_staff
         boolean is_superuser
+    }
+    
+    USER_PROFILE {
+        int id PK
+        boolean email_verified
+        string verification_code
+        datetime verification_code_expires
+        int verification_attempts
+        datetime last_verification_request
+        datetime created_at
+        datetime updated_at
+        int user_id FK
     }
     
     GAME {
@@ -1476,26 +1541,33 @@ graph LR
 
 ### ✅ Production Ready Features
 
-1. **Scalable Architecture**: Multi-tier architecture with clear separation of concerns
-2. **Security-First Design**: Multi-layer security implementation 
-3. **Performance Optimized**: Database indexing + pagination + caching
-4. **Deployment Ready**: Docker + Nginx + Gunicorn configuration
-5. **Monitoring & Logging**: Comprehensive logging and error tracking
-6. **API-Driven**: RESTful API with JWT authentication
-7. **Extensible Design**: Plugin-ready middleware and modular app structure
+1. **Enhanced User Registration**: First name & last name with comprehensive user profiles
+2. **BRIDG Email Verification**: Gmail SMTP integration with branded email templates
+3. **Complete JWT Authentication**: Login, logout, password change, token blacklisting
+4. **Enhanced Admin Panel**: Email verification status, user management without is_active confusion
+5. **Scalable Architecture**: Multi-tier architecture with clear separation of concerns
+6. **Security-First Design**: Multi-layer security implementation + .env protection
+7. **Performance Optimized**: Database indexing + pagination + caching
+8. **Deployment Ready**: Docker + Nginx + Gunicorn configuration
+9. **Monitoring & Logging**: Comprehensive logging and error tracking
+10. **API-Driven**: RESTful API with enhanced user data responses
+11. **Extensible Design**: Plugin-ready middleware and modular app structure
 
 ### 🔮 Future Enhancements
 
 1. **Microservices Architecture**: Break down into specialized services
 2. **Event-Driven Architecture**: Implement message queues for async processing
-3. **CDN Integration**: Global content delivery network
-4. **Horizontal Scaling**: Auto-scaling based on load
-5. **Advanced Analytics**: Real-time analytics dashboard
-6. **Mobile API**: Dedicated mobile application endpoints
+3. **Advanced Email Features**: Email templates for password reset, welcome series
+4. **CDN Integration**: Global content delivery network
+5. **Horizontal Scaling**: Auto-scaling based on load
+6. **Advanced Analytics**: Real-time analytics dashboard with user demographics
+7. **Mobile API**: Dedicated mobile application endpoints
+8. **Social Features**: User profiles with avatars, friend system
 
 ---
 
-**Doküman Versiyonu**: 1.0  
-**Son Güncelleme**: 30 Aralık 2024  
-**Mimari Durumu**: Production Ready  
-**Performans Durumu**: Optimized with 12 DB indexes + Pagination  
+**Doküman Versiyonu**: 2.7.0  
+**Son Güncelleme**: 31 Aralık 2024  
+**Mimari Durumu**: Production Ready with Enhanced User Registration System  
+**Performans Durumu**: Optimized with 12 DB indexes + Pagination + Email Integration  
+**Güvenlik Durumu**: Multi-layer security with .env protection + JWT token blacklisting  
