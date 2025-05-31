@@ -283,3 +283,126 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.set_password(self.validated_data['new_password'])
         user.save()
         return user
+
+
+class EmailVerificationSerializer(serializers.Serializer):
+    """
+    Email doğrulama kodu için serializer.
+    """
+    code = serializers.CharField(max_length=6, min_length=6, required=True)
+    
+    def validate_code(self, value):
+        """Doğrulama kodu format kontrolü."""
+        # Sadece rakam olmalı
+        if not value.isdigit():
+            raise serializers.ValidationError("Doğrulama kodu sadece rakamlardan oluşmalıdır.")
+        
+        # 6 haneli olmalı
+        if len(value) != 6:
+            raise serializers.ValidationError("Doğrulama kodu 6 haneli olmalıdır.")
+        
+        return value
+
+    def validate(self, data):
+        """Kullanıcı ve kod doğrulaması."""
+        user = self.context['request'].user
+        code = data['code']
+        
+        # UserProfile'ı kontrol et
+        if not hasattr(user, 'profile'):
+            raise serializers.ValidationError({
+                'non_field_errors': ['Kullanıcı profili bulunamadı.']
+            })
+        
+        profile = user.profile
+        
+        # Email zaten doğrulanmış mı?
+        if profile.email_verified:
+            raise serializers.ValidationError({
+                'non_field_errors': ['Email adresi zaten doğrulanmış.']
+            })
+        
+        # Kod geçerli mi?
+        if not profile.is_verification_code_valid(code):
+            attempts_left = max(0, 5 - profile.verification_attempts - 1)
+            raise serializers.ValidationError({
+                'code': f'Geçersiz veya süresi dolmuş kod. {attempts_left} deneme hakkınız kaldı.'
+            })
+        
+        return data
+
+    def save(self, **kwargs):
+        """Email doğrulama işlemini gerçekleştirir."""
+        user = self.context['request'].user
+        code = self.validated_data['code']
+        
+        # Email'i doğrula
+        success = user.profile.verify_email(code)
+        
+        if success:
+            logger.info(f"Email verified for user: {user.username} (ID: {user.id})")
+            return user
+        else:
+            raise serializers.ValidationError({
+                'code': 'Doğrulama başarısız oldu.'
+            })
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    """
+    Doğrulama kodu yeniden gönderme için serializer.
+    """
+    
+    def validate(self, data):
+        """Yeniden gönderme koşullarını kontrol eder."""
+        user = self.context['request'].user
+        
+        # UserProfile'ı kontrol et
+        if not hasattr(user, 'profile'):
+            raise serializers.ValidationError({
+                'non_field_errors': ['Kullanıcı profili bulunamadı.']
+            })
+        
+        profile = user.profile
+        
+        # Email zaten doğrulanmış mı?
+        if profile.email_verified:
+            raise serializers.ValidationError({
+                'non_field_errors': ['Email adresi zaten doğrulanmış.']
+            })
+        
+        # Cooldown kontrolü
+        if not profile.can_request_new_code():
+            raise serializers.ValidationError({
+                'non_field_errors': ['Yeni kod isteyebilmek için 1 dakika beklemeniz gerekiyor.']
+            })
+        
+        return data
+
+
+class EmailVerificationStatusSerializer(serializers.Serializer):
+    """
+    Email doğrulama durumu için serializer.
+    """
+    email_verified = serializers.BooleanField(read_only=True)
+    verification_code_expires = serializers.DateTimeField(read_only=True)
+    verification_attempts = serializers.IntegerField(read_only=True)
+    can_request_new_code = serializers.BooleanField(read_only=True)
+    
+    def to_representation(self, instance):
+        """UserProfile instance'ından data çıkarır."""
+        if hasattr(instance, 'profile'):
+            profile = instance.profile
+            return {
+                'email_verified': profile.email_verified,
+                'verification_code_expires': profile.verification_expires,
+                'verification_attempts': profile.verification_attempts,
+                'can_request_new_code': profile.can_request_new_code(),
+            }
+        else:
+            return {
+                'email_verified': False,
+                'verification_code_expires': None,
+                'verification_attempts': 0,
+                'can_request_new_code': True,
+            }

@@ -42,7 +42,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-
     # Third-party apps (We'll add DRF, etc. here later)
     'rest_framework',  # Django REST Framework for API development
     'rest_framework_simplejwt',  # JWT authentication for DRF
@@ -50,11 +49,10 @@ INSTALLED_APPS = [
     'django_filters',  # Django Filter for API filtering
     'corsheaders',  # Django CORS Headers for cross-origin requests
     
-
-    # Our local apps (Using AppConfig paths)
-    'games.apps.GamesConfig',
-    'users.apps.UsersConfig',
-    'interactions.apps.InteractionsConfig',
+    # Our local apps
+    'users.apps.UsersConfig',  # User management and authentication
+    'games.apps.GamesConfig',  # Game hosting and management
+    'interactions.apps.InteractionsConfig',  # User interactions (ratings, reports, etc.)
 ]
 
 CACHES = {  # Bu produksiyon ortamında Redis veya Memcached gibi bir cache kullanabilirsiniz.
@@ -84,7 +82,7 @@ ROOT_URLCONF = 'gamehost_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],  # Email templates directory eklendi
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -503,3 +501,51 @@ SIMPLE_RATE_LIMITING = {
         '::1',        # IPv6 localhost
     ]
 }
+
+# =============================================================================
+# EMAIL CONFIGURATION FOR VERIFICATION SYSTEM
+# =============================================================================
+
+# Email backend configuration
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+# Gmail SMTP settings (from .env file)
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = os.getenv('EMAIL_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_PASSWORD')
+
+# Default sender information
+DEFAULT_FROM_EMAIL = 'BRIDG Ekibi <noreply@bridg-platform.com>'
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# Email verification settings
+EMAIL_VERIFICATION = {
+    'CODE_LENGTH': 6,                    # 6 haneli kod
+    'EXPIRE_MINUTES': 15,                # 15 dakika geçerlilik
+    'MAX_ATTEMPTS': 5,                   # Maksimum deneme sayısı
+    'RESEND_COOLDOWN_MINUTES': 1,        # Yeniden gönderme bekleme süresi
+    'RATE_LIMIT_PER_HOUR': 5,            # Saatte maksimum email sayısı
+    'ENABLE_WELCOME_EMAIL': True,        # Doğrulama sonrası hoş geldin email'i
+}
+
+# Email template paths
+EMAIL_TEMPLATES = {
+    'verification': 'emails/verification_email.html',
+    'welcome': 'emails/welcome_email.html',
+    'password_reset': 'emails/password_reset.html',
+}
+
+# Console backend for development (if EMAIL_HOST_USER not set)
+if not EMAIL_HOST_USER:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    print("⚠️  EMAIL: Using console backend - emails will be printed to console")
+else:
+    print(f"📧 EMAIL: Using SMTP backend - {EMAIL_HOST}:{EMAIL_PORT}")
+
+# Email security settings
+EMAIL_TIMEOUT = 30  # 30 saniye timeout
+EMAIL_SSL_CERTFILE = None
+EMAIL_SSL_KEYFILE = None

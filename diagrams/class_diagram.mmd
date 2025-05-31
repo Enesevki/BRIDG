@@ -16,6 +16,24 @@ classDiagram
         +save()
     }
     
+    class UserProfile {
+        +UUID id
+        +boolean email_verified
+        +string verification_code
+        +datetime verification_expires
+        +int verification_attempts
+        +datetime last_verification_request
+        +datetime created_at
+        +datetime updated_at
+        +User user
+        +generate_verification_code()
+        +is_verification_code_valid(code)
+        +mark_email_verified()
+        +can_request_new_code()
+        +clean()
+        +save()
+    }
+    
     class Game {
         +UUID id
         +string title
@@ -82,6 +100,18 @@ classDiagram
     }
     
     %% ============================================
+    %% EMAIL VERIFICATION SERVICES
+    %% ============================================
+    
+    class EmailVerificationService {
+        +send_verification_email(user)$ static
+        +send_welcome_email(user)$ static
+        +create_email_context(user, verification_code)$ static
+        +render_email_template(template_name, context)$ static
+        -_get_email_template_path(template_name)$ static
+    }
+    
+    %% ============================================
     %% SERIALIZERS (Presentation Layer)
     %% ============================================
     
@@ -104,6 +134,25 @@ classDiagram
         +validate_username(value)
         +validate_email(value)
         +to_representation(instance)
+    }
+    
+    class EmailVerificationSerializer {
+        +string verification_code
+        +validate_verification_code(value)
+        +save(user)
+    }
+    
+    class ResendVerificationSerializer {
+        +validate(user)
+        +save(user)
+    }
+    
+    class EmailVerificationStatusSerializer {
+        +boolean email_verified
+        +boolean has_verification_code
+        +datetime code_expires
+        +int verification_attempts
+        +boolean can_request_new_code
     }
     
     class GameSerializer {
@@ -199,27 +248,22 @@ classDiagram
         +create(request)
     }
     
-    class JWTLogoutAPIView {
+    class EmailVerificationAPIView {
+        +EmailVerificationSerializer serializer_class
         +IsAuthenticated[] permission_classes
         +post(request)
-        +blacklist_token(refresh_token)
     }
     
-    class ChangePasswordAPIView {
+    class ResendVerificationAPIView {
+        +ResendVerificationSerializer serializer_class
         +IsAuthenticated[] permission_classes
-        +ChangePasswordSerializer serializer_class
         +post(request)
-        +generate_new_tokens(user)
     }
     
-    class GenreViewSet {
-        +GenreSerializer serializer_class
-        +get_queryset()
-    }
-    
-    class TagViewSet {
-        +TagSerializer serializer_class
-        +get_queryset()
+    class EmailVerificationStatusAPIView {
+        +EmailVerificationStatusSerializer serializer_class
+        +IsAuthenticated[] permission_classes
+        +get(request)
     }
     
     %% ============================================
@@ -312,6 +356,7 @@ classDiagram
     %% ============================================
     
     %% Model Relationships
+    User ||--|| UserProfile : has
     User ||--o{ Game : creates
     User ||--o{ Rating : makes
     User ||--o{ Report : submits
@@ -328,7 +373,10 @@ classDiagram
     ModelSerializer <|-- GenreSerializer
     ModelSerializer <|-- TagSerializer
     ModelSerializer <|-- RatingSerializer
+    ModelSerializer <|-- EmailVerificationSerializer
+    ModelSerializer <|-- EmailVerificationStatusSerializer
     Serializer <|-- ChangePasswordSerializer
+    Serializer <|-- ResendVerificationSerializer
     
     BaseValidationMixin <|-- GameSerializer
     BaseValidationMixin <|-- RegistrationSerializer
@@ -342,6 +390,9 @@ classDiagram
     GameViewSet --> GameSerializer : uses
     UserDetailAPIView --> UserSerializer : uses
     JWTRegistrationAPIView --> RegistrationSerializer : uses
+    EmailVerificationAPIView --> EmailVerificationSerializer : uses
+    ResendVerificationAPIView --> ResendVerificationSerializer : uses
+    EmailVerificationStatusAPIView --> EmailVerificationStatusSerializer : uses
     ChangePasswordAPIView --> ChangePasswordSerializer : uses
     GenreViewSet --> GenreSerializer : uses
     TagViewSet --> TagSerializer : uses
@@ -349,8 +400,17 @@ classDiagram
     %% ViewSet Model Dependencies
     GameViewSet --> Game : manages
     UserDetailAPIView --> User : manages
+    EmailVerificationAPIView --> UserProfile : manages
+    ResendVerificationAPIView --> UserProfile : manages
+    EmailVerificationStatusAPIView --> UserProfile : manages
     GenreViewSet --> Genre : manages
     TagViewSet --> Tag : manages
+    
+    %% Email Service Dependencies
+    JWTRegistrationAPIView --> EmailVerificationService : uses
+    EmailVerificationAPIView --> EmailVerificationService : uses
+    ResendVerificationAPIView --> EmailVerificationService : uses
+    EmailVerificationService --> UserProfile : modifies
     
     %% Security Service Dependencies
     GameViewSet --> GameFileSecurityValidator : uses
@@ -362,6 +422,7 @@ classDiagram
     GameSerializer --> DataValidator : uses
     RegistrationSerializer --> TextValidator : uses
     RegistrationSerializer --> DataValidator : uses
+    EmailVerificationSerializer --> TextValidator : uses
     BaseValidationMixin --> FormValidator : uses
     
     %% Permission Dependencies

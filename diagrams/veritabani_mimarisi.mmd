@@ -1,4 +1,5 @@
 erDiagram
+    AUTH_USER ||--|| USER_PROFILE : has
     AUTH_USER ||--o{ GAME : creates
     AUTH_USER ||--o{ RATING : makes
     AUTH_USER ||--o{ REPORT : submits
@@ -18,6 +19,18 @@ erDiagram
         boolean is_active
         boolean is_staff
         boolean is_superuser
+    }
+    
+    USER_PROFILE {
+        uuid id PK
+        boolean email_verified
+        string verification_code
+        datetime verification_expires
+        int verification_attempts
+        datetime last_verification_request
+        datetime created_at
+        datetime updated_at
+        int user_id FK UK
     }
     
     GAME {

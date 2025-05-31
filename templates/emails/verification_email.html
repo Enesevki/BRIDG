@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BRIDG - Email Doğrulama</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px 0;
+            border-bottom: 2px solid #ff6b35;
+        }
+        .logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ff6b35;
+            margin-bottom: 10px;
+        }
+        .tagline {
+            color: #666;
+            font-size: 14px;
+        }
+        .greeting {
+            font-size: 24px;
+            color: #ff6b35;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .message {
+            font-size: 16px;
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+        .code-container {
+            background: linear-gradient(135deg, #ff6b35, #ff8c69);
+            padding: 25px;
+            text-align: center;
+            border-radius: 12px;
+            margin: 30px 0;
+            box-shadow: 0 4px 8px rgba(255, 107, 53, 0.3);
+        }
+        .verification-code {
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+            margin: 0;
+            letter-spacing: 6px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .code-label {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .warning {
+            background-color: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .warning-text {
+            color: #f57c00;
+            font-weight: bold;
+            margin: 0;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+        }
+        .signature {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff6b35;
+            margin-bottom: 5px;
+        }
+        .team {
+            color: #666;
+            font-size: 14px;
+        }
+        .disclaimer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        .emoji {
+            font-size: 20px;
+        }
+        
+        /* Mobile responsive */
+        @media only screen and (max-width: 600px) {
+            .container { 
+                padding: 15px !important; 
+                margin: 10px !important;
+            }
+            .verification-code { 
+                font-size: 28px !important; 
+                letter-spacing: 3px !important;
+            }
+            .greeting {
+                font-size: 20px !important;
+            }
+            .message {
+                font-size: 15px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with BRIDG branding -->
+        <div class="header">
+            <div class="logo">🎮 BRIDG</div>
+            <div class="tagline">WebGL Oyun Platform Topluluğu</div>
+        </div>
+        
+        <!-- Main content -->
+        <div class="greeting">Merhaba {{username}},</div>
+        
+        <div class="message">
+            BRIDG'e katıldığın için çok mutluyuz! <span class="emoji">🧡</span>
+        </div>
+        
+        <div class="message">
+            Topluluğumuza adım atmadan önce, sadece bir adım kaldı:<br>
+            Aşağıdaki doğrulama kodunu kullanarak e-posta adresini onayla:
+        </div>
+        
+        <!-- Verification code box -->
+        <div class="code-container">
+            <div class="code-label">Doğrulama Kodun</div>
+            <div class="verification-code">{{verification_code}}</div>
+        </div>
+        
+        <!-- Warning about expiry -->
+        <div class="warning">
+            <p class="warning-text">
+                <span class="emoji">⏳</span> Bu kod 15 dakika boyunca geçerlidir, sonrasında sihrini kaybeder!
+            </p>
+        </div>
+        
+        <div class="message">
+            Sorun yaşarsan bizimle iletişime geçmekten çekinme.
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <div class="signature">Keyifli oyunlar!</div>
+            <div class="team">— BRIDG Ekibi</div>
+        </div>
+        
+        <!-- Disclaimer -->
+        <div class="disclaimer">
+            Bu e-posta otomatik olarak gönderilmiştir. Lütfen yanıtlamayın.<br>
+            E-posta: {{user_email}} | BRIDG Gaming Platform
+        </div>
+    </div>
+</body>
+</html> 

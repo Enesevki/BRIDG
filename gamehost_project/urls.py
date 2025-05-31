@@ -25,7 +25,10 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
-from users.views import JWTRegistrationAPIView, JWTLogoutAPIView, ChangePasswordAPIView
+from users.views import (
+    JWTRegistrationAPIView, JWTLogoutAPIView, ChangePasswordAPIView,
+    EmailVerificationAPIView, ResendVerificationAPIView, EmailVerificationStatusAPIView
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -40,6 +43,11 @@ urlpatterns = [
     path('api/auth/change-password/', ChangePasswordAPIView.as_view(), name='change_password'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    
+    # Email Verification Endpoints
+    path('api/auth/verify-email/', EmailVerificationAPIView.as_view(), name='verify_email'),
+    path('api/auth/resend-verification/', ResendVerificationAPIView.as_view(), name='resend_verification'),
+    path('api/auth/email-status/', EmailVerificationStatusAPIView.as_view(), name='email_verification_status'),
     
     # =============================================================================
     # USER PROFILE ENDPOINTS  

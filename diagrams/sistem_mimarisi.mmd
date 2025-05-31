@@ -35,6 +35,7 @@ graph TB
                 JWT[JWT Service]
                 TokenBlacklist[Token Blacklist Service]
                 PasswordChange[Password Change Service]
+                EmailVerification[Email Verification Service]
                 Valid[Input Validation]
                 FileSec[File Security]
                 Signals[Django Signals]
@@ -52,7 +53,10 @@ graph TB
     
     %% External Services
     subgraph "External Services"
-        Email[Email Service]
+        subgraph "Email Infrastructure"
+            GmailSMTP[Gmail SMTP<br/>smtp.gmail.com:587<br/>✅ Active]
+            ConsoleBackend[Console Backend<br/>Development Fallback]
+        end
         CDN[CDN (Future)]
     end
     
@@ -77,6 +81,7 @@ graph TB
     Games --> JWT
     Users --> JWT
     Users --> PasswordChange
+    Users --> EmailVerification
     Inter --> Valid
     Games --> Valid
     Users --> FileSec
@@ -85,6 +90,7 @@ graph TB
     JWT --> TokenBlacklist
     PasswordChange --> JWT
     TokenBlacklist --> DB
+    EmailVerification --> DB
     
     Inter --> Signals
     
@@ -99,6 +105,6 @@ graph TB
     
     WSGI --> Logs
     
-    Games -.-> Email
-    Users -.-> Email
+    EmailVerification -.-> GmailSMTP
+    EmailVerification -.-> ConsoleBackend
 ``` 

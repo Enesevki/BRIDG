@@ -11,7 +11,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
-from .serializers import RegistrationSerializer, UserSerializer, ChangePasswordSerializer
+from .serializers import (
+    RegistrationSerializer, UserSerializer, ChangePasswordSerializer,
+    EmailVerificationSerializer, ResendVerificationSerializer, 
+    EmailVerificationStatusSerializer
+)
+from .email_service import EmailVerificationService
 from gamehost_project.rate_limiting import rate_limit  # Simple rate limiting
 import logging
 
@@ -112,7 +117,8 @@ class ChangePasswordAPIView(APIView):
 
 class JWTRegistrationAPIView(generics.CreateAPIView):
     """
-    User registration endpoint that returns JWT tokens.
+    User registration endpoint with email verification.
+    Sends verification email after successful registration.
     """
     queryset = User.objects.all()
     serializer_class = RegistrationSerializer
@@ -131,15 +137,37 @@ class JWTRegistrationAPIView(generics.CreateAPIView):
             'access': str(refresh.access_token),
         }
         
-        return Response({
+        # Email verification kodu oluştur ve gönder
+        verification_code = user.profile.generate_verification_code()
+        email_sent = EmailVerificationService.send_verification_email(user, verification_code)
+        
+        response_data = {
             "user": {
                 "id": user.id,
                 "username": user.username,
                 "email": user.email,
             },
             "tokens": tokens,
+            "email_verified": False,  # Henüz doğrulanmadı
             "message": "Kullanıcı başarıyla oluşturuldu ve giriş yapıldı."
-        }, status=status.HTTP_201_CREATED)
+        }
+        
+        if email_sent:
+            response_data["email_verification"] = {
+                "sent": True,
+                "message": "Doğrulama kodu email adresinize gönderildi.",
+                "expires_in_minutes": 15
+            }
+            logger.info(f"User registered with email verification: {user.username} (ID: {user.id})")
+        else:
+            response_data["email_verification"] = {
+                "sent": False,
+                "message": "Email gönderilemedi, lütfen daha sonra tekrar deneyin.",
+                "warning": "Email servisi aktif değil - console'u kontrol edin."
+            }
+            logger.warning(f"User registered but email failed: {user.username} (ID: {user.id})")
+        
+        return Response(response_data, status=status.HTTP_201_CREATED)
     
 
 class UserDetailAPIView(generics.RetrieveAPIView):
@@ -157,3 +185,104 @@ class UserDetailAPIView(generics.RetrieveAPIView):
         URL'den bir pk/id almasına gerek kalmaz.
         """
         return self.request.user
+
+
+# =============================================================================
+# EMAIL VERIFICATION VIEWS
+# =============================================================================
+
+class EmailVerificationAPIView(APIView):
+    """
+    Email doğrulama kodu ile email adresini doğrular.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @rate_limit(requests_per_hour=30, key_type='user')  # 30 verification attempts per hour
+    def post(self, request, *args, **kwargs):
+        serializer = EmailVerificationSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            # Email doğrulamasını gerçekleştir
+            user = serializer.save()
+            
+            # Hoş geldin email'i gönder (opsiyonel)
+            EmailVerificationService.send_welcome_email(user)
+            
+            return Response({
+                "message": "Email başarıyla doğrulandı!",
+                "email_verified": True,
+                "user": {
+                    "username": user.username,
+                    "email": user.email
+                }
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                "error": True,
+                "message": "Email doğrulama başarısız.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResendVerificationAPIView(APIView):
+    """
+    Doğrulama kodunu yeniden gönderir.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @rate_limit(requests_per_hour=5, key_type='user')  # 5 resend attempts per hour
+    def post(self, request, *args, **kwargs):
+        serializer = ResendVerificationSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            user = request.user
+            
+            # Yeni doğrulama kodu oluştur
+            verification_code = user.profile.generate_verification_code()
+            
+            # Email gönder
+            email_sent = EmailVerificationService.send_verification_email(user, verification_code)
+            
+            if email_sent:
+                return Response({
+                    "message": "Doğrulama kodu tekrar gönderildi.",
+                    "expires_in_minutes": 15,
+                    "attempts_remaining": max(0, 5 - user.profile.verification_attempts)
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    "error": True,
+                    "message": "Email gönderilemedi.",
+                    "detail": "Email servisi şu anda kullanılamıyor."
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            return Response({
+                "error": True,
+                "message": "Kod yeniden gönderilemedi.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EmailVerificationStatusAPIView(APIView):
+    """
+    Email doğrulama durumunu gösterir.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        serializer = EmailVerificationStatusSerializer(user)
+        
+        return Response({
+            "user": {
+                "username": user.username,
+                "email": user.email
+            },
+            "verification_status": serializer.data
+        }, status=status.HTTP_200_OK)
