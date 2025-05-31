@@ -1,0 +1,107 @@
+graph TB
+    subgraph "External Threats"
+        XSS[XSS Attacks]
+        SQL[SQL Injection]
+        CSRF[CSRF Attacks]
+        DOS[DoS Attacks]
+        FileAttack[Malicious Files]
+        PathTraversal[Path Traversal]
+    end
+    
+    subgraph "Security Layers"
+        subgraph "Network Security"
+            Nginx_Sec[Nginx Security Config]
+            SSL_Term[SSL Termination]
+            CORS_Policy[CORS Policy]
+        end
+        
+        subgraph "Application Security"
+            subgraph "Middleware Stack"
+                RateLimit[Rate Limiting MW]
+                CORSSec[CORS Security MW]
+                SecHeaders[Security Headers MW]
+                CSRFMid[CSRF Middleware]
+            end
+            
+            subgraph "Input Validation"
+                TextValid[Text Validator]
+                DataValid[Data Validator]
+                FormValid[Form Validator]
+                SQLProtect[SQL Injection Protection]
+                XSSProtect[XSS Protection]
+            end
+            
+            subgraph "File Security"
+                FileType[File Type Validation]
+                ZipAnalyzer[ZIP Security Analyzer]
+                MalwareDetect[Malware Detection]
+                PathValid[Path Validation]
+                SizeLimit[Size Limitations]
+            end
+            
+            subgraph "Authentication & Authorization"
+                JWTAuth[JWT Authentication]
+                TokenRotation[Token Rotation]
+                TokenBlacklist[Token Blacklisting]
+                PasswordSecurity[Password Security]
+                PermCheck[Permission Checking]
+                UserAuth[User Authorization]
+            end
+        end
+        
+        subgraph "Data Security"
+            DBSec[Database Security]
+            Encryption[Data Encryption]
+            Sanitization[Data Sanitization]
+            Logging[Security Logging]
+        end
+    end
+    
+    subgraph "Protected Resources"
+        API_Endpoints[API Endpoints]
+        FileUploads[File Uploads]
+        UserData[User Data]
+        GameContent[Game Content]
+    end
+    
+    %% Threat Flow
+    XSS --> XSSProtect
+    SQL --> SQLProtect
+    CSRF --> CSRFMid
+    DOS --> RateLimit
+    FileAttack --> FileType
+    FileAttack --> ZipAnalyzer
+    FileAttack --> MalwareDetect
+    PathTraversal --> PathValid
+    
+    %% Protection Flow
+    Nginx_Sec --> SSL_Term
+    SSL_Term --> CORS_Policy
+    
+    RateLimit --> CORSSec
+    CORSSec --> SecHeaders
+    SecHeaders --> CSRFMid
+    
+    TextValid --> DataValid
+    DataValid --> FormValid
+    
+    FileType --> ZipAnalyzer
+    ZipAnalyzer --> MalwareDetect
+    MalwareDetect --> PathValid
+    PathValid --> SizeLimit
+    
+    JWTAuth --> TokenRotation
+    TokenRotation --> TokenBlacklist
+    TokenBlacklist --> PasswordSecurity
+    PasswordSecurity --> PermCheck
+    PermCheck --> UserAuth
+    
+    DBSec --> Encryption
+    Encryption --> Sanitization
+    Sanitization --> Logging
+    
+    %% Final Protection
+    SecHeaders --> API_Endpoints
+    SizeLimit --> FileUploads
+    UserAuth --> UserData
+    Logging --> GameContent 

@@ -8,9 +8,14 @@ from django.contrib.auth.models import User
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework.permissions import AllowAny
-from .serializers import RegistrationSerializer, UserSerializer
+from rest_framework.views import APIView
+from .serializers import RegistrationSerializer, UserSerializer, ChangePasswordSerializer
 from gamehost_project.rate_limiting import rate_limit  # Simple rate limiting
+import logging
+
+logger = logging.getLogger(__name__)
 
 # İsteğe Bağlı: Logout View
 # Token tabanlı sistemde logout genellikle client'ta token'ı silmekle olur.
@@ -26,6 +31,84 @@ from gamehost_project.rate_limiting import rate_limit  # Simple rate limiting
 #             return Response({"detail": "Başarıyla çıkış yapıldı."}, status=status.HTTP_200_OK)
 #         except (AttributeError, Token.DoesNotExist):
 #             return Response({"detail": "Token bulunamadı veya zaten çıkış yapılmış."}, status=status.HTTP_400_BAD_REQUEST)
+
+class JWTLogoutAPIView(APIView):
+    """
+    JWT Logout endpoint that blacklists the refresh token.
+    Requires a valid refresh token to be sent in the request.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @rate_limit(requests_per_hour=60, key_type='user')  # 60 logout attempts per hour per user
+    def post(self, request, *args, **kwargs):
+        try:
+            # Get refresh token from request
+            refresh_token = request.data.get('refresh_token')
+            
+            if not refresh_token:
+                return Response({
+                    "error": True,
+                    "message": "Refresh token gereklidir."
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create RefreshToken object and blacklist it
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            
+            logger.info(f"User logged out: {request.user.username} (ID: {request.user.id})")
+            
+            return Response({
+                "message": "Başarıyla çıkış yapıldı.",
+                "detail": "Token geçersiz kılındı."
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.warning(f"Logout failed for user {request.user.username}: {str(e)}")
+            return Response({
+                "error": True,
+                "message": "Çıkış yapılırken hata oluştu.",
+                "detail": "Geçersiz veya süresi dolmuş token."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+class ChangePasswordAPIView(APIView):
+    """
+    Kullanıcı şifre değiştirme endpoint'i.
+    Mevcut şifre doğrulaması gerektirir ve güvenli şifre değiştirme sağlar.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @rate_limit(requests_per_hour=10, key_type='user')  # 10 password changes per hour per user
+    def post(self, request, *args, **kwargs):
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            # Şifre değiştir
+            user = serializer.save()
+            
+            # Yeni JWT token'ları oluştur (güvenlik için)
+            refresh = RefreshToken.for_user(user)
+            new_tokens = {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+            
+            logger.info(f"Password changed for user: {user.username} (ID: {user.id})")
+            
+            return Response({
+                "message": "Şifre başarıyla değiştirildi.",
+                "detail": "Güvenlik için yeni token'lar oluşturuldu.",
+                "tokens": new_tokens
+            }, status=status.HTTP_200_OK)
+        else:
+            logger.warning(f"Password change failed for user {request.user.username}: {serializer.errors}")
+            return Response({
+                "error": True,
+                "message": "Şifre değiştirme başarısız.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 class JWTRegistrationAPIView(generics.CreateAPIView):
     """

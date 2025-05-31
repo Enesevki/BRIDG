@@ -25,7 +25,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
-from users.views import JWTRegistrationAPIView
+from users.views import JWTRegistrationAPIView, JWTLogoutAPIView, ChangePasswordAPIView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -36,6 +36,8 @@ urlpatterns = [
     # Modern JWT Authentication (access + refresh tokens)
     path('api/auth/register/', JWTRegistrationAPIView.as_view(), name='jwt_register'),
     path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/auth/logout/', JWTLogoutAPIView.as_view(), name='jwt_logout'),
+    path('api/auth/change-password/', ChangePasswordAPIView.as_view(), name='change_password'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
     

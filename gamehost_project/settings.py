@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     # Third-party apps (We'll add DRF, etc. here later)
     'rest_framework',  # Django REST Framework for API development
     'rest_framework_simplejwt',  # JWT authentication for DRF
+    'rest_framework_simplejwt.token_blacklist',  # JWT token blacklisting for logout
     'django_filters',  # Django Filter for API filtering
     'corsheaders',  # Django CORS Headers for cross-origin requests
     

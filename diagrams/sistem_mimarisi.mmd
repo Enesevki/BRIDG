@@ -1,0 +1,104 @@
+graph TB
+    %% External Components
+    subgraph "Client Layer"
+        FE[React/Vue.js Frontend]
+        Mobile[Mobile Apps]
+        API_Client[External API Clients]
+    end
+    
+    %% Load Balancer/Reverse Proxy
+    subgraph "Network Layer"
+        Nginx[Nginx Reverse Proxy]
+        SSL[SSL/TLS Termination]
+    end
+    
+    %% Application Layer
+    subgraph "Application Layer"
+        subgraph "Django Application"
+            WSGI[Gunicorn WSGI Server]
+            
+            subgraph "Middleware Stack"
+                CORS[CORS Security MW]
+                Auth[Authentication MW]
+                Rate[Rate Limiting MW]
+                Sec[Security Headers MW]
+                Ver[API Versioning MW]
+            end
+            
+            subgraph "Django Apps"
+                Games[Games App]
+                Users[Users App]
+                Inter[Interactions App]
+            end
+            
+            subgraph "Core Services"
+                JWT[JWT Service]
+                TokenBlacklist[Token Blacklist Service]
+                PasswordChange[Password Change Service]
+                Valid[Input Validation]
+                FileSec[File Security]
+                Signals[Django Signals]
+            end
+        end
+    end
+    
+    %% Data Layer
+    subgraph "Data Layer"
+        DB[(PostgreSQL Database)]
+        Cache[(Cache System)]
+        Files[File Storage]
+        Logs[Log Files]
+    end
+    
+    %% External Services
+    subgraph "External Services"
+        Email[Email Service]
+        CDN[CDN (Future)]
+    end
+    
+    %% Connections
+    FE --> Nginx
+    Mobile --> Nginx
+    API_Client --> Nginx
+    
+    Nginx --> SSL
+    SSL --> WSGI
+    
+    WSGI --> CORS
+    CORS --> Auth
+    Auth --> Rate
+    Rate --> Sec
+    Sec --> Ver
+    
+    Ver --> Games
+    Ver --> Users
+    Ver --> Inter
+    
+    Games --> JWT
+    Users --> JWT
+    Users --> PasswordChange
+    Inter --> Valid
+    Games --> Valid
+    Users --> FileSec
+    Games --> FileSec
+    
+    JWT --> TokenBlacklist
+    PasswordChange --> JWT
+    TokenBlacklist --> DB
+    
+    Inter --> Signals
+    
+    Games --> DB
+    Users --> DB
+    Inter --> DB
+    
+    Rate --> Cache
+    JWT --> Cache
+    
+    Games --> Files
+    
+    WSGI --> Logs
+    
+    Games -.-> Email
+    Users -.-> Email
+``` 

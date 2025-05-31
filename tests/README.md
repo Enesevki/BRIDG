@@ -5,19 +5,17 @@ Bu klasör Game Hosting Platform backend sisteminin test dosyalarını içerir.
 ## 📁 Test Dosyaları
 
 ### 🔐 Authentication Tests
-- **`jwt_test.py`** - JWT authentication sistem testleri
-- **`jwt_register_test.py`** - Kullanıcı kayıt ve JWT token testleri
+- **`jwt_test.py`** - JWT authentication flow testing
+- **`jwt_register_test.py`** - User registration with automatic JWT login
+- **`jwt_logout_test.py`** - JWT logout and token blacklisting system
+- **`change_password_test.py`** - Secure password change functionality
 
 ### 🎮 Game Upload Tests  
-- **`simple_game_upload_test.py`** - Basit oyun yükleme testleri
-- **`file_security_test.py`** - Dosya güvenlik validation testleri
+- **`simple_game_upload_test.py`** - Complete game upload workflow with JWT
 
 ### 🛡️ Security Tests
-- **`input_validation_test.py`** - Kapsamlı input validation testleri
-  - XSS protection
-  - SQL injection prevention
-  - Path traversal protection
-  - Form validation
+- **`file_security_test.py`** - File upload security validation
+- **`input_validation_test.py`** - XSS, SQL injection, path traversal protection
 
 ## 🧪 Test Çalıştırma
 

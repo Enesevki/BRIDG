@@ -25,7 +25,7 @@
 
 ### 🌟 Core Features
 - ✅ **WebGL Oyun Hosting** - Oyun dosyaları yükleme ve hosting
-- ✅ **Kullanıcı Yönetimi** - JWT tabanlı authentication 
+- ✅ **Kullanıcı Yönetimi** - JWT tabanlı authentication + logout + password change
 - ✅ **Oyun Rating Sistemi** - Like/Dislike ve değerlendirme
 - ✅ **Content Moderation** - Admin onay sistemi
 - ✅ **File Security** - Kapsamlı dosya güvenlik kontrolleri
@@ -79,6 +79,9 @@ gamehost_platform/backend/
 │   └── admin.py         # Admin interface
 ├── tests/                # Comprehensive test suite
 │   ├── jwt_test.py      # JWT authentication tests
+│   ├── jwt_register_test.py  # Registration with JWT
+│   ├── jwt_logout_test.py  # JWT logout and token blacklisting
+│   ├── change_password_test.py     # Password change functionality
 │   ├── simple_game_upload_test.py  # Game upload tests
 │   ├── file_security_test.py       # Security tests
 │   └── input_validation_test.py    # Input validation tests
@@ -182,6 +185,8 @@ GET    /api/games/tags/                         # Available tags
 ```
 POST   /api/auth/register/                      # User registration + auto-login
 POST   /api/auth/login/                         # JWT login
+POST   /api/auth/logout/                        # JWT logout (blacklist refresh token)
+POST   /api/auth/change-password/               # Change user password (auth required)
 POST   /api/auth/token/refresh/                 # Refresh JWT token
 POST   /api/auth/verify/                        # Verify JWT token
 ```
@@ -254,6 +259,13 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),                  # Header format
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
+
+# Required app for logout functionality
+INSTALLED_APPS = [
+    # ...
+    'rest_framework_simplejwt.token_blacklist',  # JWT token blacklisting for logout
+    # ...
+]
 ```
 
 ### 🛂 Permission Classes
@@ -283,6 +295,100 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 3. **User Creation**: Django User object
 4. **JWT Generation**: Immediate authentication (Access + Refresh tokens)
 5. **Auto-Login**: Return tokens for frontend
+
+### 🚪 JWT Logout System
+
+#### Token Blacklisting Strategy
+```python
+# Logout endpoint implementation
+@rate_limit(requests_per_hour=60, key_type='user')
+def post(self, request):
+    refresh_token = request.data.get('refresh_token')
+    token = RefreshToken(refresh_token)
+    token.blacklist()  # Add to blacklist database
+```
+
+#### Security Features
+- **Refresh Token Blacklisting**: Invalid tokens stored in database
+- **Access Token Preservation**: Remains valid until natural expiry (1 hour)
+- **Duplicate Logout Prevention**: Already blacklisted tokens rejected
+- **Rate Limiting**: 60 logout attempts per hour per user
+- **Authentication Required**: Must provide valid access token
+
+#### Logout Flow
+1. **Client Request**: Send refresh token + access token
+2. **Token Validation**: Verify refresh token format and authenticity
+3. **Blacklist Addition**: Add refresh token to blacklist table
+4. **Immediate Effect**: Token refresh attempts fail instantly
+5. **Client Cleanup**: Frontend clears stored tokens
+
+#### Expected Response
+```json
+{
+    "message": "Başarıyla çıkış yapıldı.",
+    "detail": "Token geçersiz kılındı."
+}
+```
+
+### 🔑 Password Change System
+
+#### Secure Password Change Strategy
+```python
+# Password change endpoint implementation
+@rate_limit(requests_per_hour=10, key_type='user')
+def post(self, request):
+    # 1. Validate old password
+    if not user.check_password(old_password):
+        raise ValidationError("Mevcut şifre yanlış.")
+    
+    # 2. Validate new password
+    validate_password(new_password, user)
+    
+    # 3. Change password
+    user.set_password(new_password)
+    user.save()
+    
+    # 4. Generate new JWT tokens (security)
+    refresh = RefreshToken.for_user(user)
+    return new_tokens
+```
+
+#### Security Features
+- **Old Password Verification**: Must provide current password
+- **New Password Validation**: Django's built-in password validators
+- **Password Uniqueness**: New password cannot be same as current
+- **Strength Requirements**: Minimum 8 characters, complexity rules
+- **Rate Limiting**: 10 password changes per hour per user
+- **JWT Token Refresh**: New tokens generated after password change
+
+#### Password Change Flow
+1. **Authentication Required**: Must provide valid access token
+2. **Old Password Check**: Verify current password for security
+3. **New Password Validation**: Strength and uniqueness checks
+4. **Password Update**: Secure password hashing and storage
+5. **Token Regeneration**: Fresh JWT tokens for enhanced security
+6. **Logging**: Security event logging for audit trail
+
+#### Expected Request
+```json
+{
+    "old_password": "CurrentPassword123!",
+    "new_password": "NewSecurePassword456!",
+    "new_password2": "NewSecurePassword456!"
+}
+```
+
+#### Expected Response
+```json
+{
+    "message": "Şifre başarıyla değiştirildi.",
+    "detail": "Güvenlik için yeni token'lar oluşturuldu.",
+    "tokens": {
+        "refresh": "new_refresh_token...",
+        "access": "new_access_token..."
+    }
+}
+```
 
 ---
 
@@ -555,22 +661,27 @@ tests/
 ├── README.md                    # Test documentation
 ├── jwt_test.py                 # JWT authentication flow
 ├── jwt_register_test.py        # Registration with JWT
+├── jwt_logout_test.py          # JWT logout and token blacklisting
+├── change_password_test.py     # Password change functionality
 ├── simple_game_upload_test.py  # Complete game upload flow
 ├── file_security_test.py       # Security validation tests
 └── input_validation_test.py    # XSS, SQL injection tests
 ```
 
 #### Test Categories
-- ✅ **Authentication**: Login, register, token refresh, validation
+- ✅ **Authentication**: Login, register, logout, password change, token refresh, validation
 - ✅ **File Security**: ZIP validation, malicious file detection
 - ✅ **Input Validation**: XSS protection, SQL injection prevention
 - ✅ **Game Upload**: Complete workflow with JWT authentication
 - ✅ **API Security**: Rate limiting, permission checks
+- ✅ **Token Blacklisting**: Logout functionality and token invalidation
 
 #### Running Tests
 ```bash
 # Individual test files
 python tests/jwt_test.py
+python tests/jwt_logout_test.py
+python tests/change_password_test.py
 python tests/simple_game_upload_test.py
 
 # Django test runner
@@ -586,6 +697,46 @@ for test_file in tests/*.py; do python "$test_file"; done
 - **File Generation**: Creates valid WebGL ZIP files
 - **Rate Limit Testing**: Validates middleware functionality
 - **Error Handling**: Tests validation failures
+
+### 🧪 API Testing
+```bash
+# Register user with JWT
+curl -X POST "http://127.0.0.1:8000/api/auth/register/" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "testuser", "email": "test@example.com", "password": "securepass123", "password2": "securepass123"}'
+
+# Login and get JWT tokens
+curl -X POST "http://127.0.0.1:8000/api/auth/login/" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "testuser", "password": "securepass123"}'
+
+# Logout (blacklist refresh token)
+curl -X POST "http://127.0.0.1:8000/api/auth/logout/" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "YOUR_REFRESH_TOKEN"}'
+
+# Change password
+curl -X POST "http://127.0.0.1:8000/api/auth/change-password/" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"old_password": "CurrentPass123!", "new_password": "NewSecurePass456!", "new_password2": "NewSecurePass456!"}'
+
+# Upload game with JWT
+curl -X POST "http://127.0.0.1:8000/api/games/games/" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "title=Test Game" \
+  -F "description=A test WebGL game" \
+  -F "webgl_build_zip=@game.zip" \
+  -F "genre_ids=[1]" \
+  -F "tag_ids=[1,2]"
+
+# Rate game
+curl -X POST "http://127.0.0.1:8000/api/games/games/{game_id}/rate/" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"rating_type": 1}'
+```
 
 ---
 
@@ -869,6 +1020,18 @@ curl -X POST "http://127.0.0.1:8000/api/auth/login/" \
   -H "Content-Type: application/json" \
   -d '{"username": "testuser", "password": "securepass123"}'
 
+# Logout (blacklist refresh token)
+curl -X POST "http://127.0.0.1:8000/api/auth/logout/" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "YOUR_REFRESH_TOKEN"}'
+
+# Change password
+curl -X POST "http://127.0.0.1:8000/api/auth/change-password/" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"old_password": "CurrentPass123!", "new_password": "NewSecurePass456!", "new_password2": "NewSecurePass456!"}'
+
 # Upload game with JWT
 curl -X POST "http://127.0.0.1:8000/api/games/games/" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
@@ -909,7 +1072,7 @@ python manage.py sqlmigrate app_name migration_name
 ### ✅ Production Ready Features
 - **Complete game hosting system** with WebGL support
 - **Robust security** (file validation, input sanitization, rate limiting)
-- **JWT authentication** with token refresh and rotation
+- **JWT authentication** with token refresh, rotation, secure logout, and password management
 - **Custom middleware stack** for security and monitoring
 - **User management** with comprehensive validation
 - **Content moderation** workflow with admin interface
@@ -921,6 +1084,7 @@ python manage.py sqlmigrate app_name migration_name
 - **Environment configuration** with .env support
 - **Advanced error handling** with custom exception handling
 - **Production deployment** ready with PostgreSQL support
+- **Token blacklisting** for secure logout functionality
 
 ### 🔮 Future Enhancements
 - **WebSocket Integration**: Real-time notifications and chat
@@ -937,5 +1101,5 @@ python manage.py sqlmigrate app_name migration_name
 ---
 
 **Last Updated**: December 30, 2024  
-**Version**: 2.2.0  
-**Status**: Production Ready with Performance Optimization
+**Version**: 2.4.0  
+**Status**: Production Ready with Complete Authentication System

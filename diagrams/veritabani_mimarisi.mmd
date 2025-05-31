@@ -1,0 +1,100 @@
+erDiagram
+    AUTH_USER ||--o{ GAME : creates
+    AUTH_USER ||--o{ RATING : makes
+    AUTH_USER ||--o{ REPORT : submits
+    AUTH_USER ||--o{ OUTSTANDINGTOKEN : owns
+    GAME ||--o{ RATING : receives
+    GAME ||--o{ REPORT : receives
+    GAME }o--o{ GENRE : belongs_to
+    GAME }o--o{ TAG : has
+    OUTSTANDINGTOKEN ||--o{ BLACKLISTEDTOKEN : blacklisted
+    
+    AUTH_USER {
+        int id PK
+        string username UK
+        string email UK
+        string password
+        datetime date_joined
+        boolean is_active
+        boolean is_staff
+        boolean is_superuser
+    }
+    
+    GAME {
+        uuid id PK
+        string title
+        text description
+        file webgl_build_zip
+        file thumbnail
+        string entry_point_path
+        boolean is_published
+        string moderation_status
+        datetime created_at
+        datetime updated_at
+        int play_count
+        int view_count
+        int likes_count
+        int dislikes_count
+        int creator_id FK
+    }
+    
+    RATING {
+        uuid id PK
+        int rating_type
+        datetime created_at
+        int user_id FK
+        uuid game_id FK
+    }
+    
+    REPORT {
+        uuid id PK
+        text reason
+        string status
+        datetime created_at
+        datetime resolved_at
+        int user_id FK
+        uuid game_id FK
+        int resolved_by_id FK
+    }
+    
+    GENRE {
+        int id PK
+        string name UK
+        string slug UK
+        text description
+    }
+    
+    TAG {
+        int id PK
+        string name UK
+        string slug UK
+        text description
+    }
+    
+    GAME_GENRES {
+        int id PK
+        uuid game_id FK
+        int genre_id FK
+    }
+    
+    GAME_TAGS {
+        int id PK
+        uuid game_id FK
+        int tag_id FK
+    }
+    
+    OUTSTANDINGTOKEN {
+        bigint id PK
+        string token UK
+        datetime created_at
+        datetime expires_at
+        int user_id FK
+        string jti UK
+    }
+    
+    BLACKLISTEDTOKEN {
+        bigint id PK
+        string token UK
+        datetime blacklisted_at
+        bigint outstanding_token_id FK
+    } 

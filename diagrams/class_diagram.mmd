@@ -1,0 +1,373 @@
+classDiagram
+    %% ============================================
+    %% DJANGO MODELS (Data Layer)
+    %% ============================================
+    
+    class User {
+        +int id
+        +string username
+        +string email
+        +string password
+        +datetime date_joined
+        +boolean is_active
+        +boolean is_staff
+        +boolean is_superuser
+        +clean()
+        +save()
+    }
+    
+    class Game {
+        +UUID id
+        +string title
+        +text description
+        +file webgl_build_zip
+        +file thumbnail
+        +string entry_point_path
+        +boolean is_published
+        +string moderation_status
+        +datetime created_at
+        +datetime updated_at
+        +int play_count
+        +int view_count
+        +int likes_count
+        +int dislikes_count
+        +User creator
+        +clean()
+        +save()
+        +get_published_games()$ static
+        +increment_play_count()
+        +increment_view_count()
+    }
+    
+    class Rating {
+        +UUID id
+        +int rating_type
+        +datetime created_at
+        +User user
+        +Game game
+        +clean()
+        +save()
+    }
+    
+    class Report {
+        +UUID id
+        +text reason
+        +string status
+        +datetime created_at
+        +datetime resolved_at
+        +User user
+        +Game game
+        +User resolved_by
+        +clean()
+        +save()
+        +mark_resolved()
+    }
+    
+    class Genre {
+        +int id
+        +string name
+        +string slug
+        +text description
+        +clean()
+        +save()
+    }
+    
+    class Tag {
+        +int id
+        +string name
+        +string slug
+        +text description
+        +clean()
+        +save()
+    }
+    
+    %% ============================================
+    %% SERIALIZERS (Presentation Layer)
+    %% ============================================
+    
+    class BaseValidationMixin {
+        <<mixin>>
+        +validate(data)
+        +get_validation_type()
+    }
+    
+    class ModelSerializer {
+        <<abstract>>
+        +Meta class
+        +create(validated_data)
+        +update(instance, validated_data)
+        +to_representation(instance)
+        +validate()
+    }
+    
+    class UserSerializer {
+        +validate_username(value)
+        +validate_email(value)
+        +to_representation(instance)
+    }
+    
+    class GameSerializer {
+        +UserSerializer creator
+        +GenreSerializer[] genres
+        +TagSerializer[] tags
+        +int[] genre_ids
+        +int[] tag_ids
+        +get_validation_type()
+        +validate_title(value)
+        +validate_description(value)
+        +to_representation(instance)
+        +create(validated_data)
+        +update(instance, validated_data)
+    }
+    
+    class RegistrationSerializer {
+        +string password2
+        +get_validation_type()
+        +validate_username(value)
+        +validate_email(value)
+        +validate_password(value)
+        +validate(data)
+        +create(validated_data)
+    }
+    
+    class GenreSerializer {
+        +to_representation(instance)
+    }
+    
+    class TagSerializer {
+        +to_representation(instance)
+    }
+    
+    class RatingSerializer {
+        +validate_rating_type(value)
+        +validate(data)
+    }
+    
+    class ChangePasswordSerializer {
+        +string old_password
+        +string new_password
+        +string new_password2
+        +validate_old_password(value)
+        +validate_new_password(value)
+        +validate(data)
+        +save()
+    }
+    
+    %% ============================================
+    %% VIEWSETS (Controller Layer)
+    %% ============================================
+    
+    class ModelViewSet {
+        <<abstract>>
+        +queryset
+        +serializer_class
+        +permission_classes
+        +list(request)
+        +create(request)
+        +retrieve(request, pk)
+        +update(request, pk)
+        +destroy(request, pk)
+        +get_queryset()
+        +get_serializer()
+    }
+    
+    class GameViewSet {
+        +GameSerializer serializer_class
+        +IsOwnerOrReadOnly[] permission_classes
+        +DjangoFilterBackend[] filter_backends
+        +create(request)
+        +update(request, pk)
+        +destroy(request, pk)
+        +rate(request, pk)
+        +unrate(request, pk)
+        +report(request, pk)
+        +increment_play_count(request, pk)
+        +my_liked(request)
+        +get_queryset()
+        +perform_create(serializer)
+    }
+    
+    class UserDetailAPIView {
+        +UserSerializer serializer_class
+        +IsAuthenticated[] permission_classes
+        +get_object()
+    }
+    
+    class JWTRegistrationAPIView {
+        +RegistrationSerializer serializer_class
+        +AllowAny[] permission_classes
+        +create(request)
+    }
+    
+    class JWTLogoutAPIView {
+        +IsAuthenticated[] permission_classes
+        +post(request)
+        +blacklist_token(refresh_token)
+    }
+    
+    class ChangePasswordAPIView {
+        +IsAuthenticated[] permission_classes
+        +ChangePasswordSerializer serializer_class
+        +post(request)
+        +generate_new_tokens(user)
+    }
+    
+    class GenreViewSet {
+        +GenreSerializer serializer_class
+        +get_queryset()
+    }
+    
+    class TagViewSet {
+        +TagSerializer serializer_class
+        +get_queryset()
+    }
+    
+    %% ============================================
+    %% SECURITY & VALIDATION SERVICES
+    %% ============================================
+    
+    class GameFileSecurityValidator {
+        +UploadedFile uploaded_file
+        +string temp_path
+        +validate()
+        -_check_file_size()
+        -_save_temp_file()
+        -_cleanup_temp_file()
+    }
+    
+    class ZipSecurityAnalyzer {
+        +string zip_path
+        +string[] threats_found
+        +int total_extracted_size
+        +int file_count
+        +analyze()
+        -_check_zip_structure(zip_file)
+        -_scan_file_contents(zip_file)
+        -_check_compression_bomb(zip_file)
+        -_calculate_entropy(content)
+    }
+    
+    class WebGLStructureValidator {
+        +ZipFile zip_file
+        +string[] file_list
+        +string[] issues
+        +validate()
+        -_check_required_files()
+        -_check_structure_patterns()
+    }
+    
+    class TextValidator {
+        +validate_title(value)$ static
+        +validate_description(value)$ static
+        +validate_username(value)$ static
+        +sanitize_text(text)$ static
+    }
+    
+    class DataValidator {
+        +validate_email(email)$ static
+        +validate_url(url)$ static
+        +validate_id_list(ids)$ static
+    }
+    
+    class FormValidator {
+        +validate(data, validation_type, is_partial)$ static
+        +validate_game_upload(data)$ static
+        +validate_user_registration(data)$ static
+    }
+    
+    %% ============================================
+    %% MIDDLEWARE CLASSES
+    %% ============================================
+    
+    class SimpleRateLimitMiddleware {
+        +get_response
+        +process_request(request)
+        +process_response(request, response)
+        -_should_skip_rate_limiting(request)
+    }
+    
+    class SecurityHeadersMiddleware {
+        +process_response(request, response)
+    }
+    
+    class CORSSecurityMiddleware {
+        +string[] SUSPICIOUS_ORIGINS
+        +process_request(request)
+    }
+    
+    class APIVersionMiddleware {
+        +process_response(request, response)
+    }
+    
+    %% ============================================
+    %% PERMISSION CLASSES
+    %% ============================================
+    
+    class IsOwnerOrReadOnly {
+        +has_object_permission(request, view, obj)
+    }
+    
+    %% ============================================
+    %% RELATIONSHIPS
+    %% ============================================
+    
+    %% Model Relationships
+    User ||--o{ Game : creates
+    User ||--o{ Rating : makes
+    User ||--o{ Report : submits
+    Game ||--o{ Rating : receives
+    Game ||--o{ Report : receives
+    Game }o--o{ Genre : belongs_to
+    Game }o--o{ Tag : has
+    User ||--o{ Report : resolves
+    
+    %% Serializer Inheritance
+    ModelSerializer <|-- UserSerializer
+    ModelSerializer <|-- GameSerializer
+    ModelSerializer <|-- RegistrationSerializer
+    ModelSerializer <|-- GenreSerializer
+    ModelSerializer <|-- TagSerializer
+    ModelSerializer <|-- RatingSerializer
+    Serializer <|-- ChangePasswordSerializer
+    
+    BaseValidationMixin <|-- GameSerializer
+    BaseValidationMixin <|-- RegistrationSerializer
+    
+    %% ViewSet Inheritance
+    ModelViewSet <|-- GameViewSet
+    ModelViewSet <|-- GenreViewSet
+    ModelViewSet <|-- TagViewSet
+    
+    %% Serializer Usage in ViewSets
+    GameViewSet --> GameSerializer : uses
+    UserDetailAPIView --> UserSerializer : uses
+    JWTRegistrationAPIView --> RegistrationSerializer : uses
+    ChangePasswordAPIView --> ChangePasswordSerializer : uses
+    GenreViewSet --> GenreSerializer : uses
+    TagViewSet --> TagSerializer : uses
+    
+    %% ViewSet Model Dependencies
+    GameViewSet --> Game : manages
+    UserDetailAPIView --> User : manages
+    GenreViewSet --> Genre : manages
+    TagViewSet --> Tag : manages
+    
+    %% Security Service Dependencies
+    GameViewSet --> GameFileSecurityValidator : uses
+    GameFileSecurityValidator --> ZipSecurityAnalyzer : uses
+    ZipSecurityAnalyzer --> WebGLStructureValidator : uses
+    
+    %% Validation Service Dependencies
+    GameSerializer --> TextValidator : uses
+    GameSerializer --> DataValidator : uses
+    RegistrationSerializer --> TextValidator : uses
+    RegistrationSerializer --> DataValidator : uses
+    BaseValidationMixin --> FormValidator : uses
+    
+    %% Permission Dependencies
+    GameViewSet --> IsOwnerOrReadOnly : uses
+    
+    %% Nested Serializer Relationships
+    GameSerializer --> UserSerializer : embeds
+    GameSerializer --> GenreSerializer : embeds
+    GameSerializer --> TagSerializer : embeds 
