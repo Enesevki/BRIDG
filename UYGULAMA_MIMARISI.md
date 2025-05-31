@@ -228,6 +228,7 @@ graph TB
         Permissions[Permission Classes]
         Filters[Search & Filtering]
         Pagination[Response Pagination]
+        AdminInterface[Enhanced Admin Panel]
     end
     
     subgraph "Business Logic Layer (Controllers)"
@@ -235,10 +236,13 @@ graph TB
             GameViews[Game ViewSets]
             UserViews[User ViewSets]
             InterViews[Interaction ViewSets]
+            AuthViews[Authentication ViewSets]
         end
         
         subgraph "Services"
-            AuthService[Authentication Service]
+            AuthService[JWT Authentication Service]
+            TokenService[Token Management Service]
+            EmailService[Email Verification Service]
             FileService[File Security Service]
             ValidationService[Input Validation Service]
             RateService[Rate Limiting Service]
@@ -246,73 +250,105 @@ graph TB
         
         subgraph "Custom Logic"
             GameLogic[Game Business Logic]
-            UserLogic[User Management Logic]
+            UserLogic[Enhanced User Management Logic]
+            EmailLogic[Email Verification Logic]
             SecurityLogic[Security Validation Logic]
+            AdminLogic[Admin Panel Logic]
         end
     end
     
     subgraph "Data Layer (Models)"
         subgraph "Django Models"
             GameModel[Game Model]
-            UserModel[User Model]
+            UserModel[Enhanced User Model]
+            UserProfileModel[UserProfile Model]
             RatingModel[Rating Model]
             ReportModel[Report Model]
             GenreModel[Genre Model]
             TagModel[Tag Model]
+            TokenBlacklist[JWT Token Blacklist]
         end
         
         subgraph "Database"
             PostgreSQL[("PostgreSQL Database")]
-            Indexes[Database Indexes]
+            Indexes[Enhanced Database Indexes]
         end
         
-        subgraph "Storage"
+        subgraph "Storage & External"
             FileStorage[Game File Storage]
+            EmailBackend[Email Backend System]
         end
     end
     
-    %% Flow
+    %% Flow connections – Presentation Layer
     API --> Serializers
     Serializers --> Permissions
     Permissions --> Filters
     Filters --> Pagination
+    AdminInterface --> AdminLogic
     
+    %% Presentation to ViewSets
     API --> GameViews
     API --> UserViews
     API --> InterViews
+    API --> AuthViews
     
+    %% ViewSets to Services
     GameViews --> AuthService
     UserViews --> AuthService
     InterViews --> AuthService
+    AuthViews --> AuthService
+    AuthViews --> TokenService
+    
+    UserViews --> EmailService
+    AuthViews --> EmailService
     
     GameViews --> FileService
     GameViews --> ValidationService
     UserViews --> ValidationService
+    AuthViews --> ValidationService
     
     GameViews --> RateService
     UserViews --> RateService
     InterViews --> RateService
+    AuthViews --> RateService
     
+    %% ViewSets to Custom Logic
     GameViews --> GameLogic
     UserViews --> UserLogic
+    AuthViews --> EmailLogic
     GameLogic --> SecurityLogic
+    AdminInterface --> AdminLogic
     
+    %% Custom Logic to Models
     GameLogic --> GameModel
     UserLogic --> UserModel
+    UserLogic --> UserProfileModel
+    EmailLogic --> UserProfileModel
+    TokenService --> TokenBlacklist
+    
     GameModel --> RatingModel
     GameModel --> ReportModel
     GameModel --> GenreModel
     GameModel --> TagModel
     
+    AdminLogic --> UserModel
+    AdminLogic --> UserProfileModel
+    AdminLogic --> GameModel
+    
+    %% Models to Database & Storage
     GameModel --> PostgreSQL
     UserModel --> PostgreSQL
+    UserProfileModel --> PostgreSQL
     RatingModel --> PostgreSQL
     ReportModel --> PostgreSQL
     GenreModel --> PostgreSQL
     TagModel --> PostgreSQL
+    TokenBlacklist --> PostgreSQL
     
     PostgreSQL --> Indexes
     GameModel --> FileStorage
+    EmailService --> EmailBackend
 ```
 
 ### 📋 MVC Mimarisi Detaylı Açıklama
@@ -343,7 +379,7 @@ Database
 
 ### 1. 📊 **MODEL LAYER (Data/Persistence Katmanı)**
 
-**Konumu**: `games/models.py`, `interactions/models.py`, Django User modeli
+**Konumu**: `games/models.py`, `interactions/models.py`, `users/models.py`, Django User modeli
 
 **Sorumlulukları**:
 - ✅ Veritabanı şeması tanımlaması
@@ -380,6 +416,15 @@ class Game(models.Model):
             models.Index(fields=['created_at']),
             models.Index(fields=['is_published', 'created_at']),
         ]
+
+# users/models.py - Enhanced User Profile with Email Verification
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    email_verified = models.BooleanField(default=False)
+    verification_code = models.CharField(max_length=6, blank=True)
+    verification_code_expires = models.DateTimeField(null=True, blank=True)
+    verification_attempts = models.IntegerField(default=0)
+    last_verification_request = models.DateTimeField(null=True, blank=True)
 ```
 
 ### 2. ⚙️ **VIEW LAYER (Controller/Business Logic Katmanı)**
@@ -392,49 +437,60 @@ class Game(models.Model):
 - ✅ Business logic coordination
 - ✅ Cross-model operations
 - ✅ File processing koordinasyonu
+- ✅ Email verification coordination
+- ✅ JWT token management
 - ✅ Error handling ve response management
 - ❌ Data structure tanımlaması DEĞİL
 - ❌ JSON formatting DEĞİL (Serializer'ın işi)
 
 **Kod Örneği**:
 ```python
-# games/views.py
-class GameViewSet(viewsets.ModelViewSet):
-    serializer_class = GameSerializer
-    permission_classes = [IsOwnerOrReadOnly]
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    
-    def create(self, request, *args, **kwargs):
-        # 1. Authentication check (middleware'den gelir)
-        # 2. Rate limiting check (middleware'den gelir)
-        
-        # 3. Business logic orchestration
-        serializer = self.get_serializer(data=request.data)
+# users/views.py - Enhanced Registration with Email Verification
+class RegistrationView(APIView):
+    @rate_limit(requests_per_hour=10, key_type='ip')
+    def post(self, request):
+        # 1. Input validation ve sanitization
+        serializer = RegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # 4. File security validation (Cross-cutting concern)
-        if 'webgl_build_zip' in request.FILES:
-            validate_game_upload(request.FILES['webgl_build_zip'])
+        # 2. Enhanced user creation with first_name, last_name
+        user = serializer.save()
         
-        # 5. Business rule application
-        game = serializer.save(creator=request.user)
-        game.is_published = False  # New games require moderation
-        game.moderation_status = 'PENDING'
-        game.save()
+        # 3. Email verification business logic
+        profile, created = UserProfile.objects.get_or_create(user=user)
+        verification_code = generate_verification_code()
+        profile.verification_code = verification_code
+        profile.verification_code_expires = timezone.now() + timedelta(minutes=15)
+        profile.save()
         
-        # 6. Logging business event
-        logger.info(f"New game uploaded: {game.title} by {request.user.username}")
+        # 4. BRIDG branded email sending
+        send_verification_email(user.email, user.username, verification_code)
         
-        return Response(serializer.data, status=201)
-    
-    def get_queryset(self):
-        # Business logic: Only show published games to non-owners
-        user = self.request.user
-        if user.is_authenticated:
-            return Game.objects.filter(
-                Q(is_published=True) | Q(creator=user)
-            )
-        return Game.objects.filter(is_published=True)
+        # 5. JWT token generation for immediate login
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            },
+            'email_verification_required': True
+        }, status=201)
+
+# JWT Logout with Token Blacklisting
+class LogoutView(APIView):
+    @rate_limit(requests_per_hour=60, key_type='user')
+    def post(self, request):
+        # Token blacklisting business logic
+        refresh_token = request.data.get('refresh_token')
+        token = RefreshToken(refresh_token)
+        token.blacklist()  # Add to blacklist database
+        
+        return Response({
+            'message': 'Başarıyla çıkış yapıldı.',
+            'detail': 'Token geçersiz kılındı.'
+        })
 ```
 
 ### 3. 🎨 **SERIALIZER LAYER (Presentation/Interface Katmanı)**
@@ -447,55 +503,45 @@ class GameViewSet(viewsets.ModelViewSet):
 - ✅ Input validation & sanitization
 - ✅ Nested data serialization
 - ✅ Field-level permissions ve data filtering
+- ✅ Enhanced user data with first_name, last_name
 - ❌ Business logic DEĞİL
 - ❌ Database operations DEĞİL
 
 **Kod Örneği**:
 ```python
-# games/serializers.py
-class GameSerializer(BaseValidationMixin, serializers.ModelSerializer):
-    creator = UserSerializer(read_only=True)  # Nested serialization
-    genres = GenreSerializer(many=True, read_only=True)
-    genre_ids = serializers.ListField(
-        child=serializers.IntegerField(), write_only=True
-    )
+# users/serializers.py - Enhanced User Registration
+class RegistrationSerializer(BaseValidationMixin, serializers.ModelSerializer):
+    password2 = serializers.CharField(write_only=True)
+    first_name = serializers.CharField(required=True, max_length=30)
+    last_name = serializers.CharField(required=True, max_length=30)
     
     class Meta:
-        model = Game
-        fields = ['id', 'title', 'description', 'creator', 'genres', 
-                 'genre_ids', 'webgl_build_zip', 'is_published', 'play_count']
-        read_only_fields = ['id', 'creator', 'play_count', 'is_published']
+        model = User
+        fields = ['username', 'email', 'password', 'password2', 'first_name', 'last_name']
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'first_name': {'required': True},
+            'last_name': {'required': True},
+        }
     
-    def get_validation_type(self):
-        return 'game_upload'
-    
-    def validate_title(self, value):
-        # Input validation ve sanitization
-        return TextValidator.validate_title(value)
-    
-    def to_representation(self, instance):
-        # Output formatlaması ve permissions
-        data = super().to_representation(instance)
-        request = self.context.get('request')
-        
-        # Only show unpublished games to owners and staff
-        if not instance.is_published:
-            if not (request and request.user.is_authenticated and 
-                   (instance.creator == request.user or request.user.is_staff)):
-                return None
-                
-        return data
+    def validate(self, attrs):
+        # Enhanced validation with name fields
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError("Şifreler eşleşmiyor.")
+        return attrs
     
     def create(self, validated_data):
-        # Extract many-to-many field data
-        genre_ids = validated_data.pop('genre_ids', [])
-        game = super().create(validated_data)
-        
-        # Set many-to-many relationships
-        if genre_ids:
-            game.genres.set(genre_ids)
-            
-        return game
+        # Enhanced user creation with complete profile
+        validated_data.pop('password2')
+        user = User.objects.create_user(**validated_data)
+        return user
+
+# Enhanced User Response with Complete Profile
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'date_joined']
+        read_only_fields = ['id', 'date_joined']
 ```
 
 ### 🔄 **Gerçek Veri Akışı: Game Upload Örneği**
@@ -555,7 +601,10 @@ MIDDLEWARE = [
 - **File Security**: `games/security.py` - ZIP validation, malware detection
 - **Input Validation**: `games/input_validation.py` - XSS, SQL injection protection
 - **Rate Limiting**: `gamehost_project/rate_limiting.py` - Request throttling
+- **Email Verification**: `users/email_utils.py` - BRIDG branded email service
+- **JWT Token Management**: Token blacklisting and refresh rotation
 - **Event System**: `interactions/signals.py` - Automatic updates
+- **Admin Panel**: `users/admin.py` - Enhanced user management with email verification status
 
 #### **3. Shared Business Logic**:
 ```python
@@ -569,6 +618,23 @@ def validate_game_upload(uploaded_file):
 def validate_request_data(data, validation_type, is_partial=False):
     """Input validation across all API endpoints"""
     return FormValidator.validate(data, validation_type, is_partial)
+
+# Enhanced email verification system
+def send_verification_email(email, username, verification_code):
+    """BRIDG branded email verification across registration and resend endpoints"""
+    send_mail(
+        subject='BRIDG\'e hoş geldin! Hesabını doğrulayalım 🎮',
+        message=f'Doğrulama kodun: {verification_code}',
+        from_email='BRIDG Ekibi <noreply@bridg-platform.com>',
+        recipient_list=[email],
+        html_message=render_bridg_email_template(username, verification_code)
+    )
+
+# JWT token management
+def blacklist_refresh_token(refresh_token):
+    """Token blacklisting across logout and security endpoints"""
+    token = RefreshToken(refresh_token)
+    token.blacklist()
 ```
 
 ### 🎯 **Mimari Avantajları**
