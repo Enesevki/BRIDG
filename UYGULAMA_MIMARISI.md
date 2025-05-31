@@ -100,8 +100,8 @@ graph TB
     
     %% Data Layer
     subgraph "Data Layer"
-        DB[(PostgreSQL Database)]
-        Cache[(Cache System)]
+        DB[("PostgreSQL Database")]
+        Cache[("Cache System")]
         Files[File Storage]
         Logs[Log Files]
     end
@@ -109,7 +109,7 @@ graph TB
     %% External Services
     subgraph "External Services"
         Email[Email Service]
-        CDN[CDN (Future)]
+        CDN[CDN Future]
     end
     
     %% Connections
@@ -173,12 +173,12 @@ graph TB
         end
         
         subgraph "Database Server"
-            PostgreSQL[(PostgreSQL)]
-            Backup[(DB Backups)]
+            PostgreSQL[("PostgreSQL")]
+            Backup[("DB Backups")]
         end
         
         subgraph "Cache Server"
-            Redis[(Redis Cache)]
+            Redis[("Redis Cache")]
         end
         
         subgraph "Storage"
@@ -262,7 +262,7 @@ graph TB
         end
         
         subgraph "Database"
-            PostgreSQL[(PostgreSQL Database)]
+            PostgreSQL[("PostgreSQL Database")]
             Indexes[Database Indexes]
         end
         
@@ -1350,23 +1350,23 @@ graph TB
 graph TB
     subgraph "Docker Compose Stack"
         subgraph "Web Container"
-            NginxContainer[nginx:alpine<br/>Port: 80, 443]
+            NginxContainer["nginx:alpine | Port: 80, 443"]
         end
         
         subgraph "Application Container"
-            DjangoContainer[python:3.11-slim<br/>Gunicorn + Django<br/>Port: 8000]
+            DjangoContainer["python:3.11-slim | Gunicorn + Django | Port: 8000"]
         end
         
         subgraph "Database Container"
-            PostgreSQLContainer[postgres:15<br/>Port: 5432]
+            PostgreSQLContainer["postgres:15 | Port: 5432"]
         end
         
         subgraph "Cache Container"
-            RedisContainer[redis:7-alpine<br/>Port: 6379]
+            RedisContainer["redis:7-alpine | Port: 6379"]
         end
         
         subgraph "Worker Container"
-            CeleryContainer[python:3.11-slim<br/>Celery Workers]
+            CeleryContainer["python:3.11-slim | Celery Workers"]
         end
     end
     
@@ -1378,7 +1378,7 @@ graph TB
     end
     
     subgraph "Networks"
-        AppNetwork[app_network<br/>bridge]
+        AppNetwork["app_network | bridge"]
     end
     
     %% Container connections
@@ -1414,51 +1414,51 @@ graph TB
 graph TB
     subgraph "Database Performance"
         subgraph "Indexing Strategy"
-            SingleIdx[Single Column Indexes<br/>6 indexes on critical fields]
-            CompoundIdx[Compound Indexes<br/>6 indexes for complex queries]
-            CoveringIdx[Covering Indexes<br/>90% query coverage]
+            SingleIdx["Single Column Indexes | 6 indexes on critical fields"]
+            CompoundIdx["Compound Indexes | 6 indexes for complex queries"]
+            CoveringIdx["Covering Indexes | 90% query coverage"]
         end
         
         subgraph "Query Optimization"
-            QueryOpt[Query Optimization<br/>select_related(), prefetch_related()]
-            PaginationOpt[Pagination<br/>20 items per page]
-            LazyLoading[Lazy Loading<br/>Only required fields]
+            QueryOpt["Query Optimization | select_related(), prefetch_related()"]
+            PaginationOpt["Pagination | 20 items per page"]
+            LazyLoading["Lazy Loading | Only required fields"]
         end
     end
     
     subgraph "Application Performance"
         subgraph "Caching Layers"
-            L1Cache[L1: Django Cache<br/>Database cache active]
-            L2Cache[L2: Redis Cache<br/>Session & rate limiting]
-            L3Cache[L3: Nginx Cache<br/>Static files & media]
+            L1Cache["L1: Django Cache | Database cache active"]
+            L2Cache["L2: Redis Cache | Session & rate limiting"]
+            L3Cache["L3: Nginx Cache | Static files & media"]
         end
         
         subgraph "Response Optimization"
-            Serialization[Optimized Serializers<br/>Minimal data transfer]
-            Compression[HTTP Compression<br/>Gzip enabled]
-            KeepAlive[HTTP Keep-Alive<br/>Connection reuse]
+            Serialization["Optimized Serializers | Minimal data transfer"]
+            Compression["HTTP Compression | Gzip enabled"]
+            KeepAlive["HTTP Keep-Alive | Connection reuse"]
         end
     end
     
     subgraph "Security Performance"
         subgraph "Rate Limiting"
-            IPLimit[IP-based Rate Limiting<br/>100 req/hour anonymous]
-            UserLimit[User-based Rate Limiting<br/>1000 req/hour authenticated]
-            EndpointLimit[Endpoint-specific Limits<br/>Upload: 5/hour, Rating: 100/hour]
+            IPLimit["IP-based Rate Limiting | 100 req/hour anonymous"]
+            UserLimit["User-based Rate Limiting | 1000 req/hour authenticated"]
+            EndpointLimit["Endpoint-specific Limits | Upload: 5/hour, Rating: 100/hour"]
         end
         
         subgraph "File Processing"
-            StreamUpload[Streaming File Upload<br/>Memory efficient]
-            BackgroundProcess[Background Processing<br/>Async file validation]
-            ChunkedTransfer[Chunked Transfer<br/>Large file support]
+            StreamUpload["Streaming File Upload | Memory efficient"]
+            BackgroundProcess["Background Processing | Async file validation"]
+            ChunkedTransfer["Chunked Transfer | Large file support"]
         end
     end
     
     subgraph "Monitoring & Metrics"
-        ResponseTime[Response Time Monitoring<br/>API endpoint performance]
-        DatabaseMetrics[Database Query Metrics<br/>Slow query detection]
-        CacheHitRate[Cache Hit Rate<br/>Cache effectiveness monitoring]
-        ErrorTracking[Error Rate Tracking<br/>Performance degradation alerts]
+        ResponseTime["Response Time Monitoring | API endpoint performance"]
+        DatabaseMetrics["Database Query Metrics | Slow query detection"]
+        CacheHitRate["Cache Hit Rate | Cache effectiveness monitoring"]
+        ErrorTracking["Error Rate Tracking | Performance degradation alerts"]
     end
     
     %% Performance Flow
@@ -1490,36 +1490,36 @@ graph TB
 graph LR
     subgraph "Current Performance Metrics"
         subgraph "API Response Times"
-            GameList[GET /api/games/games/<br/>200ms avg]
-            GameDetail[GET /api/games/games/{id}/<br/>150ms avg]
-            GameUpload[POST /api/games/games/<br/>2-5s avg]
-            UserAuth[POST /api/auth/login/<br/>120ms avg]
+            GameList["GET /api/games/games/ | 200ms avg"]
+            GameDetail["GET /api/games/games/{id}/ | 150ms avg"]
+            GameUpload["POST /api/games/games/ | 2-5s avg"]
+            UserAuth["POST /api/auth/login/ | 120ms avg"]
         end
         
         subgraph "Database Performance"
-            QueryTime[Average Query Time<br/>10-50ms]
-            IndexCoverage[Index Coverage<br/>90% of queries]
-            ConnectionPool[Connection Pool<br/>20 connections max]
+            QueryTime["Average Query Time | 10-50ms"]
+            IndexCoverage["Index Coverage | 90% of queries"]
+            ConnectionPool["Connection Pool | 20 connections max"]
         end
         
         subgraph "Cache Performance"
-            CacheHit[Cache Hit Rate<br/>85% for rate limiting]
-            CacheSize[Cache Size<br/>500MB max]
-            CacheTimeout[Cache Timeout<br/>1 hour default]
+            CacheHit["Cache Hit Rate | 85% for rate limiting"]
+            CacheSize["Cache Size | 500MB max"]
+            CacheTimeout["Cache Timeout | 1 hour default"]
         end
         
         subgraph "File Processing"
-            UploadSpeed[Upload Speed<br/>10MB/s avg]
-            ProcessingTime[Security Validation<br/>1-3s per file]
-            StorageSize[Storage Usage<br/>Optimized compression]
+            UploadSpeed["Upload Speed | 10MB/s avg"]
+            ProcessingTime["Security Validation | 1-3s per file"]
+            StorageSize["Storage Usage | Optimized compression"]
         end
     end
     
     subgraph "Performance Targets"
-        Target1[API Response < 500ms]
-        Target2[95% Uptime]
-        Target3[Cache Hit Rate > 80%]
-        Target4[File Upload < 10s]
+        Target1["API Response < 500ms"]
+        Target2["95% Uptime"]
+        Target3["Cache Hit Rate > 80%"]
+        Target4["File Upload < 10s"]
     end
     
     GameList --> Target1
