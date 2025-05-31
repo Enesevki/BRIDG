@@ -1,11 +1,64 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
 from django.utils.html import format_html
 from django.utils import timezone
 from .models import UserProfile
 
 
 # ============================================================================
-# USERPROFILE ADMIN ONLY
+# CUSTOM USER ADMIN
+# ============================================================================
+
+class CustomUserAdmin(BaseUserAdmin):
+    """Enhanced User admin with email verification status."""
+    
+    list_display = (
+        'username', 
+        'email', 
+        'first_name', 
+        'last_name',
+        'email_verification_status',
+        'is_staff', 
+        'date_joined'
+    )
+    
+    list_filter = (
+        'is_staff', 
+        'is_superuser',
+        'profile__email_verified',  # Email verification filter
+        'date_joined'
+    )
+    
+    search_fields = ('username', 'first_name', 'last_name', 'email')
+    
+    # Add email verification status column
+    def email_verification_status(self, obj):
+        """Show email verification status with color coding."""
+        if hasattr(obj, 'profile'):
+            if obj.profile.email_verified:
+                return format_html(
+                    '<span style="background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px;">✅ Doğrulandı</span>'
+                )
+            else:
+                return format_html(
+                    '<span style="background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px;">❌ Doğrulanmadı</span>'
+                )
+        else:
+            return format_html(
+                '<span style="background: #e2e3e5; color: #6c757d; padding: 2px 6px; border-radius: 3px;">❓ Profil Yok</span>'
+            )
+    email_verification_status.short_description = 'Email Doğrulama'
+    email_verification_status.admin_order_field = 'profile__email_verified'
+
+
+# Unregister the default User admin and register our custom one
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)
+
+
+# ============================================================================
+# USERPROFILE ADMIN
 # ============================================================================
 
 @admin.register(UserProfile)

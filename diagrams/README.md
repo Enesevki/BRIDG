@@ -104,6 +104,14 @@ mermaid.initialize({
 
 ## 📋 Güncellenme Geçmişi
 
+### v1.3 (December 31, 2024) - User Profile Enhancement
+- **User Model**: Added first_name and last_name fields to AUTH_USER table
+- **Registration System**: Updated RegistrationSerializer with first_name/last_name validation
+- **API Response**: Updated UserSerializer to include first_name and last_name in responses  
+- **Admin Panel**: Removed is_active column, added first_name and last_name to admin display
+- **Database Schema**: Updated AUTH_USER table structure in veritabani_mimarisi.mmd
+- **Class Diagram**: Enhanced User, UserSerializer, and RegistrationSerializer classes
+
 ### v1.2 (December 30, 2024) - Complete Authentication System
 - **JWT Logout System**: Added JWTLogoutAPIView to class diagram
 - **Token Blacklisting**: Updated security architecture with token blacklist security layer

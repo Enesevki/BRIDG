@@ -52,7 +52,7 @@ class UserSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'date_joined']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'date_joined']
 
 
 class RegistrationSerializer(serializers.ModelSerializer):
@@ -62,10 +62,12 @@ class RegistrationSerializer(serializers.ModelSerializer):
     """
     password = serializers.CharField(write_only=True, min_length=8)
     password2 = serializers.CharField(write_only=True, min_length=8)
+    first_name = serializers.CharField(max_length=30, required=True)
+    last_name = serializers.CharField(max_length=30, required=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password2']
+        fields = ['username', 'email', 'password', 'password2', 'first_name', 'last_name']
 
     def get_validation_type(self):
         """Form validator için validation tipini döndürür."""
@@ -88,6 +90,42 @@ class RegistrationSerializer(serializers.ModelSerializer):
         # Basic email validation (Django will handle detailed validation)
         if '@' not in value or '.' not in value.split('@')[-1]:
             raise serializers.ValidationError("Geçerli bir email adresi girin.")
+        
+        return value
+
+    def validate_first_name(self, value):
+        """İsim validasyonu."""
+        if not value or not value.strip():
+            raise serializers.ValidationError("İsim alanı boş olamaz.")
+        
+        # Remove extra whitespace
+        value = value.strip()
+        
+        # Length check
+        if len(value) < 1 or len(value) > 30:
+            raise serializers.ValidationError("İsim 1-30 karakter arasında olmalıdır.")
+        
+        # Basic sanitization - allow letters, spaces, and some Turkish characters
+        if not all(c.isalpha() or c.isspace() or c in 'çğıöşüÇĞIİÖŞÜ' for c in value):
+            raise serializers.ValidationError("İsim sadece harf ve boşluk içerebilir.")
+        
+        return value
+
+    def validate_last_name(self, value):
+        """Soyisim validasyonu."""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Soyisim alanı boş olamaz.")
+        
+        # Remove extra whitespace
+        value = value.strip()
+        
+        # Length check
+        if len(value) < 1 or len(value) > 30:
+            raise serializers.ValidationError("Soyisim 1-30 karakter arasında olmalıdır.")
+        
+        # Basic sanitization - allow letters, spaces, and some Turkish characters
+        if not all(c.isalpha() or c.isspace() or c in 'çğıöşüÇĞIİÖŞÜ' for c in value):
+            raise serializers.ValidationError("Soyisim sadece harf ve boşluk içerebilir.")
         
         return value
 
@@ -136,7 +174,9 @@ class RegistrationSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
-            password=validated_data['password']
+            password=validated_data['password'],
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name']
         )
         
         return user

@@ -62,7 +62,9 @@ def test_change_password_success():
         "username": f"{TEST_USER_PREFIX}_success",
         "email": f"{TEST_USER_PREFIX}_success@test.com",
         "password": original_password,
-        "password2": original_password
+        "password2": original_password,
+        "first_name": "Password",
+        "last_name": "TestUser"
     }
     
     tokens = {}
@@ -175,7 +177,9 @@ def test_change_password_errors():
         "username": f"{TEST_USER_PREFIX}_errors",
         "email": f"{TEST_USER_PREFIX}_errors@test.com",
         "password": original_password,
-        "password2": original_password
+        "password2": original_password,
+        "first_name": "Error",
+        "last_name": "TestUser"
     }
     
     tokens = {}

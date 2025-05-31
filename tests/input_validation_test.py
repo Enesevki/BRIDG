@@ -27,7 +27,9 @@ def test_registration_validation():
                 "username": f"validuser_{random.randint(1000, 9999)}",
                 "email": f"valid{random.randint(1000, 9999)}@example.com",
                 "password": "SecurePass123",
-                "password2": "SecurePass123"
+                "password2": "SecurePass123",
+                "first_name": "Valid",
+                "last_name": "User"
             },
             "should_pass": True
         },
@@ -37,7 +39,9 @@ def test_registration_validation():
                 "username": "<script>alert('xss')</script>",
                 "email": f"test{random.randint(1000, 9999)}@example.com",
                 "password": "TestPass123",
-                "password2": "TestPass123"
+                "password2": "TestPass123",
+                "first_name": "XSS",
+                "last_name": "Test"
             },
             "should_pass": False
         },
@@ -47,7 +51,9 @@ def test_registration_validation():
                 "username": "admin'; DROP TABLE users; --",
                 "email": f"test{random.randint(1000, 9999)}@example.com",
                 "password": "TestPass123",
-                "password2": "TestPass123"
+                "password2": "TestPass123",
+                "first_name": "SQL",
+                "last_name": "Test"
             },
             "should_pass": False
         },
@@ -57,7 +63,9 @@ def test_registration_validation():
                 "username": "ab",
                 "email": f"test{random.randint(1000, 9999)}@example.com",
                 "password": "TestPass123",
-                "password2": "TestPass123"
+                "password2": "TestPass123",
+                "first_name": "Short",
+                "last_name": "User"
             },
             "should_pass": False
         },
@@ -67,7 +75,9 @@ def test_registration_validation():
                 "username": f"testuser_{random.randint(1000, 9999)}",
                 "email": "invalid-email",
                 "password": "TestPass123",
-                "password2": "TestPass123"
+                "password2": "TestPass123",
+                "first_name": "Invalid",
+                "last_name": "Email"
             },
             "should_pass": False
         },
@@ -77,7 +87,9 @@ def test_registration_validation():
                 "username": f"testuser_{random.randint(1000, 9999)}",
                 "email": f"test{random.randint(1000, 9999)}@example.com",
                 "password": "password",
-                "password2": "password"
+                "password2": "password",
+                "first_name": "Weak",
+                "last_name": "Password"
             },
             "should_pass": False
         },
@@ -87,7 +99,9 @@ def test_registration_validation():
                 "username": f"testuser_{random.randint(1000, 9999)}",
                 "email": f"test{random.randint(1000, 9999)}@example.com",
                 "password": "TestPass123",
-                "password2": "DifferentPass123"
+                "password2": "DifferentPass123",
+                "first_name": "Password",
+                "last_name": "Mismatch"
             },
             "should_pass": False
         },
@@ -97,7 +111,9 @@ def test_registration_validation():
                 "username": "spamuser123",
                 "email": f"test{random.randint(1000, 9999)}@example.com",
                 "password": "TestPass123",
-                "password2": "TestPass123"
+                "password2": "TestPass123",
+                "first_name": "Spam",
+                "last_name": "User"
             },
             "should_pass": False
         }
@@ -159,7 +175,9 @@ def test_game_validation():
         "username": f"gamevalidtest_{random.randint(1000, 9999)}",
         "email": f"gametest{random.randint(1000, 9999)}@example.com",
         "password": "SecurePass123",
-        "password2": "SecurePass123"
+        "password2": "SecurePass123",
+        "first_name": "Game",
+        "last_name": "Validator"
     }
     
     try:

@@ -294,11 +294,21 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 ```
 
 ### 👤 User Registration Flow
-1. **Input Validation**: Username, email, password security
+1. **Input Validation**: Username, email, password, first_name, last_name security
 2. **Uniqueness Check**: Prevent duplicate accounts
-3. **User Creation**: Django User object
+3. **User Creation**: Django User object with complete profile information (first_name, last_name already exist in Django User model)
 4. **JWT Generation**: Immediate authentication (Access + Refresh tokens)
 5. **Auto-Login**: Return tokens for frontend
+
+#### 📝 Django User Model Note
+Django's built-in User model already includes `first_name` and `last_name` fields:
+```python
+# Built-in Django User fields include:
+- id, username, email, password
+- first_name, last_name  # ✅ Already available - no migration needed
+- is_staff, is_superuser, is_active
+- date_joined, last_login
+```
 
 ### 🚪 JWT Logout System
 
@@ -568,15 +578,15 @@ The admin panel now includes comprehensive email verification status monitoring:
 ```python
 # Admin list display includes:
 - username, email, first_name, last_name
-- is_active, is_staff status  
 - email_verification_status (✅ Doğrulandı / ❌ Doğrulanmadı)
+- is_staff status  
 - date_joined
 ```
 
 #### 🔍 Advanced Filtering Options
 ```python
 # Filter users by:
-- Account status (is_active, is_staff, is_superuser)
+- Account status (is_staff, is_superuser)
 - Email verification status (profile__email_verified)
 - Registration date (date_joined)
 - Search by: username, first_name, last_name, email
@@ -954,7 +964,7 @@ for test_file in tests/*.py; do python "$test_file"; done
 # Register user with JWT
 curl -X POST "http://127.0.0.1:8000/api/auth/register/" \
   -H "Content-Type: application/json" \
-  -d '{"username": "testuser", "email": "test@example.com", "password": "securepass123", "password2": "securepass123"}'
+  -d '{"username": "testuser", "email": "test@example.com", "password": "securepass123", "password2": "securepass123", "first_name": "Test", "last_name": "User"}'
 
 # Login and get JWT tokens
 curl -X POST "http://127.0.0.1:8000/api/auth/login/" \
@@ -1264,7 +1274,7 @@ game.zip
 # Register user with JWT
 curl -X POST "http://127.0.0.1:8000/api/auth/register/" \
   -H "Content-Type: application/json" \
-  -d '{"username": "testuser", "email": "test@example.com", "password": "securepass123", "password2": "securepass123"}'
+  -d '{"username": "testuser", "email": "test@example.com", "password": "securepass123", "password2": "securepass123", "first_name": "Test", "last_name": "User"}'
 
 # Login and get JWT tokens
 curl -X POST "http://127.0.0.1:8000/api/auth/login/" \
@@ -1353,5 +1363,5 @@ python manage.py sqlmigrate app_name migration_name
 ---
 
 **Last Updated**: December 31, 2024  
-**Version**: 2.5.0  
-**Status**: Production Ready with Complete Email Verification System
+**Version**: 2.6.0  
+**Status**: Production Ready with Complete User Registration System (First Name & Last Name)

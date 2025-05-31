@@ -144,7 +144,9 @@ def test_jwt_game_upload():
         "username": f"gametest_{random_id}",
         "email": f"gametest_{random_id}@example.com",
         "password": "testpass123",
-        "password2": "testpass123"
+        "password2": "testpass123",
+        "first_name": "Game",
+        "last_name": "Tester"
     }
     
     print(f"📋 1. Register user: {register_data['username']}")

@@ -58,7 +58,9 @@ def test_registration_with_email_verification():
         "username": f"{TEST_USER_PREFIX}_reg",
         "email": f"{TEST_USER_PREFIX}_reg@test.com",
         "password": "SecurePass123!",
-        "password2": "SecurePass123!"
+        "password2": "SecurePass123!",
+        "first_name": "Email",
+        "last_name": "Test"
     }
     
     try:

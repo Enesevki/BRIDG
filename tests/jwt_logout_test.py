@@ -20,6 +20,7 @@ import requests
 import json
 import time
 from datetime import datetime
+import random
 
 # Configuration
 BASE_URL = "http://127.0.0.1:8000"
@@ -53,11 +54,14 @@ def test_jwt_logout_complete_flow():
     print_test_header("JWT Logout API Complete Test")
     
     # Test data
-    test_user = {
-        "username": f"{TEST_USER_PREFIX}_user",
-        "email": f"{TEST_USER_PREFIX}@test.com",
+    random_id = random.randint(1000, 9999)
+    register_data = {
+        "username": f"logouttest_{random_id}",
+        "email": f"logouttest_{random_id}@example.com",
         "password": "TestSecure123!",
-        "password2": "TestSecure123!"
+        "password2": "TestSecure123!",
+        "first_name": "Logout",
+        "last_name": "Tester"
     }
     
     # Store tokens for testing
@@ -69,7 +73,7 @@ def test_jwt_logout_complete_flow():
         
         register_response = requests.post(
             f"{BASE_URL}/api/auth/register/",
-            json=test_user,
+            json=register_data,
             headers={"Content-Type": "application/json"}
         )
         

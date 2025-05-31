@@ -142,11 +142,7 @@ class JWTRegistrationAPIView(generics.CreateAPIView):
         email_sent = EmailVerificationService.send_verification_email(user, verification_code)
         
         response_data = {
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-            },
+            "user": UserSerializer(user).data,
             "tokens": tokens,
             "email_verified": False,  # Henüz doğrulanmadı
             "message": "Kullanıcı başarıyla oluşturuldu ve giriş yapıldı."

@@ -26,10 +26,13 @@ def test_jwt_registration():
         "username": f"testuserJWT_{random_id}",
         "email": f"test_{random_id}@example.com",
         "password": "testpass123",
-        "password2": "testpass123"
+        "password2": "testpass123",
+        "first_name": "Test",
+        "last_name": "User"
     }
     
     print(f"📋 Testing registration for user: {register_data['username']}")
+    print(f"👤 Name: {register_data['first_name']} {register_data['last_name']}")
     print()
     
     # ==========================================================================
@@ -113,7 +116,9 @@ def test_duplicate_registration():
         "username": "testuserJWT_duplicate",  # Fixed username for duplicate test
         "email": "duplicate@example.com",
         "password": "testpass123",
-        "password2": "testpass123"
+        "password2": "testpass123",
+        "first_name": "Duplicate",
+        "last_name": "Test"
     }
     
     register_url = f"{BASE_URL}/api/auth/register/"

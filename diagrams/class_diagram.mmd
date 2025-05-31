@@ -7,6 +7,8 @@ classDiagram
         +int id
         +string username
         +string email
+        +string first_name
+        +string last_name
         +string password
         +datetime date_joined
         +boolean is_active
@@ -131,6 +133,12 @@ classDiagram
     }
     
     class UserSerializer {
+        +id : int
+        +username : string
+        +email : string
+        +first_name : string
+        +last_name : string
+        +date_joined : datetime
         +validate_username(value)
         +validate_email(value)
         +to_representation(instance)
@@ -171,9 +179,13 @@ classDiagram
     
     class RegistrationSerializer {
         +string password2
+        +string first_name
+        +string last_name
         +get_validation_type()
         +validate_username(value)
         +validate_email(value)
+        +validate_first_name(value)
+        +validate_last_name(value)
         +validate_password(value)
         +validate(data)
         +create(validated_data)
