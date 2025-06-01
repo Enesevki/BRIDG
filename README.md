@@ -246,7 +246,13 @@ Bu proje [MIT Lisansı](LICENSE) ile lisanslanmıştır.
 
 ## 📬 İletişim
 
-- **Developer**: [Enesevki](https://github.com/Enesevki) [Enesevki](https://github.com/Enesevki) [Enesevki](https://github.com/Enesevki)
+- **Developers**: 
+-[Kasım Deliacı](https://github.com/KasimDeliaci)
+-[Elif Güven](https://github.com/elifguv)
+-[Eren Özer](https://github.com/Eren0zer)
+-[Elif Pazarbaşı](https://github.com/elifpazarda)
+-[Enes Şevki Dönmez](https://github.com/Enesevki)
+-[Yasin Ekici](https://github.com/YasinEkici)
 
 ## 🎯 Roadmap
 
