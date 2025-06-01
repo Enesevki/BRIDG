@@ -3,7 +3,7 @@
 **Proje**: Game Hosting Platform Backend  
 **Teknoloji**: Django REST Framework + PostgreSQL  
 **Sürüm**: 2.7.0 (Production Ready with Enhanced User Registration)  
-**Tarih**: 31 Aralık 2024  
+**Tarih**: 31 Mayıs 2025  
 
 ---
 
