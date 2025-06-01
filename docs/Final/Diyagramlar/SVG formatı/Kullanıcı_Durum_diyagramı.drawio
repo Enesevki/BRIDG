@@ -1,0 +1,159 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36" version="26.0.1">
+  <diagram name="Sayfa -1" id="Bm28lX1d2X-V6bOg92aY">
+    <mxGraphModel dx="1213" dy="612" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-1" value="Ziyaretci&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="160" y="180" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-2" value="&lt;div&gt;Kayıtlı Kullanıcı&lt;/div&gt;" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="440" y="180" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-4" value="Admin" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="160" y="420" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-6" value="Kayıt ol" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="130" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-10" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-6">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="210" as="sourcePoint" />
+            <mxPoint x="300" y="220" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-38" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ICFYF_HeyvcyOwx9IHnD-11">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="440" y="210" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-11" value="Giriş Yap" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="185" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-12" value="Oyunları&lt;div&gt;Oyna&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="240" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-14" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-11">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="210" as="sourcePoint" />
+            <mxPoint x="290" y="185" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-15" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-12">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="210" as="sourcePoint" />
+            <mxPoint x="300" y="195" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-16" value="Oyunları&lt;div&gt;Beğen&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="17.5" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-17" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-16">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="470" y="210" as="sourcePoint" />
+            <mxPoint x="580" y="220" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-18" value="Profilini&lt;div&gt;Görüntüle&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="72.5" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-19" value="Oyun&amp;nbsp;&lt;div&gt;Yükle&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="127.5" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-20" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-18">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="470" y="210" as="sourcePoint" />
+            <mxPoint x="570" y="185" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-21" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-19">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="470" y="210" as="sourcePoint" />
+            <mxPoint x="580" y="195" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-24" value="Genre/Tag Ekle" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="182.5" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-25" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-24">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="470" y="210" as="sourcePoint" />
+            <mxPoint x="580" y="385" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-26" value="Oturumu Kapat" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="237.5" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-27" value="Şifre&amp;nbsp;&lt;div&gt;Güncelle&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="292.5" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-28" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-26">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="470" y="210" as="sourcePoint" />
+            <mxPoint x="570" y="350" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-29" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-27">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="470" y="210" as="sourcePoint" />
+            <mxPoint x="580" y="360" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-30" value="Kullanıcıları&lt;div&gt;Yönet&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="370" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-31" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-30">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="450" as="sourcePoint" />
+            <mxPoint x="300" y="460" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-32" value="Yüklenmiş Oyunları Yönet" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="425" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-33" value="Yüklenen Oyunu İncele" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="480" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-34" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-32">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="450" as="sourcePoint" />
+            <mxPoint x="290" y="425" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-35" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-33">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="450" as="sourcePoint" />
+            <mxPoint x="300" y="435" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-36" value="Oyunları&lt;div&gt;Görüntüle&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="295" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-37" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-36">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="210" as="sourcePoint" />
+            <mxPoint x="290" y="275" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-39" value="Yüklediği Oyunları Görüntüle" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="352.5" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-40" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-39">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="470" y="210" as="sourcePoint" />
+            <mxPoint x="570" y="110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-41" value="Oyunu Onayla" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="535" width="80" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ICFYF_HeyvcyOwx9IHnD-42" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="ICFYF_HeyvcyOwx9IHnD-41">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="190" y="450" as="sourcePoint" />
+            <mxPoint x="290" y="515" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
