@@ -1,4 +1,4 @@
-# 🎮 GameSite - Oyun Hosting Platformu
+# 🎮 BRIDG - Oyun Hosting Platformu
 
 **BRIDG Gaming Platform** - Modern, güvenli ve kullanıcı dostu WebGL oyun hosting sistemi. Oyun geliştiricilerin oyunlarını yükleyip paylaşabildiği, oyuncuların keşfedip oynayabildiği kapsamlı bir platform.
 
@@ -38,7 +38,7 @@
 - **Security**: Custom input validation + file güvenlik sistemi
 - **Email**: Gmail SMTP / Console backend (development)
 
-### ⚡ Frontend (Planlanan)
+### ⚡ Frontend
 - **Framework**: React 18+ 
 - **Routing**: React Router
 - **HTTP Client**: Axios
@@ -50,91 +50,14 @@
 - **Automatic Pagination** - 20 öğe/sayfa
 - **Signal System** - Otomatik rating count güncellemeleri
 
-## 🗂️ Proje Yapısı
+## 🗂️ Repository Yapısı
 
 ```
 GameSite/
-├── backend/                      # Django Backend (✅ Hazır)
-│   ├── gamehost_project/        # Ana proje ayarları
-│   │   ├── settings.py         # Django konfigürasyonu
-│   │   ├── rate_limiting.py    # Rate limiting sistemi
-│   │   └── middleware.py       # Custom middleware'ler
-│   ├── games/                  # Oyun yönetim uygulaması
-│   │   ├── models.py          # Game, Genre, Tag modelleri
-│   │   ├── views.py           # API ViewSets
-│   │   ├── serializers.py     # DRF serializers
-│   │   ├── security.py        # Dosya güvenlik doğrulaması
-│   │   └── input_validation.py # XSS/SQL injection koruması
-│   ├── users/                 # Kullanıcı yönetimi
-│   ├── interactions/          # Rating, report sistemi
-│   ├── tests/                 # Kapsamlı test suite
-│   ├── media/                 # Yüklenen oyun dosyaları
-│   └── logs/                  # Uygulama logları
-├── frontend/                   # React Frontend (🔄 Geliştirme aşamasında)
+├── backend/           
+├── frontend/
+├── games/                
 └── README.md
-```
-
-## 🚀 Hızlı Başlangıç
-
-### 1. Backend Kurulumu
-
-```bash
-# Projeyi klonla
-git clone https://github.com/Enesevki/GameSite.git
-cd GameSite/backend
-
-# Virtual environment oluştur
-python -m venv gamehost_env
-source gamehost_env/bin/activate  # Linux/Mac
-# gamehost_env\Scripts\activate   # Windows
-
-# Bağımlılıkları yükle
-pip install -r requirements.txt
-
-# Ortam değişkenlerini ayarla
-cp .env.example .env
-# .env dosyasını düzenle
-
-# Veritabanı kurulumu
-python manage.py makemigrations
-python manage.py migrate
-
-# Rate limiting için cache tablosu oluştur
-python manage.py createcachetable cache_table
-
-# Superuser oluştur
-python manage.py createsuperuser
-
-# Development server'ı çalıştır
-python manage.py runserver 8000
-```
-
-### 2. Ortam Değişkenleri (.env)
-
-```bash
-# Veritabanı Ayarları
-DB_NAME=gamehost_db
-DB_USER=gamehost_user
-DB_PASSWORD=your_secure_password
-DB_HOST=localhost
-DB_PORT=5432
-
-# Güvenlik
-SECRET_KEY=your-very-long-and-secure-secret-key
-
-# Email Ayarları (Üretim için)
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=your-email@gmail.com
-EMAIL_PASSWORD=your-16-digit-app-password  # Gmail App Password gerekli!
-```
-
-### 3. Frontend Kurulumu (Gelecekte)
-
-```bash
-cd frontend
-npm install
-npm run dev
 ```
 
 ## 📡 API Endpoints
@@ -220,20 +143,6 @@ tests/
 ├── simple_game_upload_test.py  # Oyun yükleme testi
 ├── file_security_test.py       # Güvenlik doğrulaması
 └── input_validation_test.py    # XSS, SQL injection testleri
-```
-
-### Testleri Çalıştırma
-```bash
-# Tek tek test dosyaları
-python tests/jwt_test.py
-python tests/jwt_logout_test.py
-python tests/change_password_test.py
-
-# Tüm testler
-python manage.py test
-
-# Manuel testlerin hepsi
-for test_file in tests/*.py; do python "$test_file"; done
 ```
 
 ## 🔐 Güvenlik Özellikleri
@@ -337,9 +246,7 @@ Bu proje [MIT Lisansı](LICENSE) ile lisanslanmıştır.
 
 ## 📬 İletişim
 
-- **Developer**: [Enesevki](https://github.com/Enesevki)
-- **Project Repository**: [GameSite](https://github.com/Enesevki/GameSite)
-- **Issues**: [GitHub Issues](https://github.com/Enesevki/GameSite/issues)
+- **Developer**: [Enesevki](https://github.com/Enesevki) [Enesevki](https://github.com/Enesevki) [Enesevki](https://github.com/Enesevki)
 
 ## 🎯 Roadmap
 
